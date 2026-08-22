@@ -1,0 +1,15 @@
+# Binaries
+/bin/
+/dist/
+
+# Go
+*.exe
+*.test
+*.out
+coverage.out
+
+.idea/
+*.swp
+
+# Generated (optional — commit if you prefer vendoring codegen output)
+# **/*_gen.go

@@ -1,0 +1,17 @@
+version: "1"
+
+dialect: postgres
+migrations: ./migrations
+output: ./generated
+package: generated
+
+generate:
+  entities: true
+  repositories: true
+  query_helpers: true
+
+queries:
+  - entity: User
+    file: ./queries/users.sql
+  - entity: Order
+    file: ./queries/orders.sql
