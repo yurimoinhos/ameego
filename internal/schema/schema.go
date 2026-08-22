@@ -22,6 +22,8 @@ type Column struct {
 	Default    string
 	IsPrimary  bool
 	IsAutoIncr bool
+	RefTable   string
+	RefColumn  string
 }
 
 // Index represents a table index.

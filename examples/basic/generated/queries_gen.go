@@ -74,3 +74,36 @@ func (q *OrderByIdQuery) Exists(ctx context.Context, id int64) (bool, error) {
 	}
 	return true, nil
 }
+
+// RoleByIdQuery is a compile-time typed query builder for roles.
+type RoleByIdQuery struct {
+	repo *RoleRepository
+}
+
+// ById starts a typed lookup on roles.Id.
+func (r *RoleRepository) ById(id string) *RoleByIdQuery {
+	return &RoleByIdQuery{repo: r}
+}
+
+// One executes the query and returns a single row.
+func (q *RoleByIdQuery) One(ctx context.Context, id string) (Role, error) {
+	return q.repo.GetByID(ctx, id)
+}
+
+// Exists checks whether a row with the given primary key exists.
+func (q *RoleByIdQuery) Exists(ctx context.Context, id string) (bool, error) {
+	where := fmt.Sprintf("%s = %s", q.repo.db.QuoteIdent(`id`), q.repo.db.Placeholder(1))
+	query := fmt.Sprintf("SELECT 1 FROM %s WHERE %s LIMIT 1",
+		q.repo.db.QuoteIdent(roleTable),
+		where,
+	)
+	var n int
+	err := q.repo.db.GetContext(ctx, &n, query, id)
+	if err != nil {
+		if goql.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}

@@ -13,12 +13,11 @@ import (
 // {{ .RepoName }} provides compile-time typed CRUD for {{ .TableName }}.
 type {{ .RepoName }} struct {
 	db *goql.DB
-	builder *goql.Builder
 }
 
 // New{{ .RepoName }} creates a repository for {{ .TableName }}.
 func New{{ .RepoName }}(db *goql.DB) *{{ .RepoName }} {
-	return &{{ .RepoName }}{db: db, builder: db.NewBuilder()}
+	return &{{ .RepoName }}{db: db}
 }
 
 const {{ .StructName | lower }}Table = {{ quote .TableName }}
@@ -31,20 +30,24 @@ const {{ .StructName | lower }}InsertSQL = {{ quote .InsertSQL }}
 const {{ .StructName | lower }}UpdateSQL = {{ quote .UpdateSQL }}
 {{- end }}
 
-var {{ .StructName | lower }}Columns = []string{
-{{- range .Columns }}
-	{{ quote .SQLName }},
-{{- end }}
-}
-
 // TableName returns the database table name.
 func (r *{{ .RepoName }}) TableName() string {
 	return {{ .StructName | lower }}Table
 }
 
-// Builder returns the dialect-native SQL builder for dynamic queries.
-func (r *{{ .RepoName }}) Builder() *goql.Builder {
-	return r.builder
+// Query starts a deferred DSL query rooted at {{ .TableName }}.
+func (r *{{ .RepoName }}) Query() *goql.Query {
+	return goql.NewQuery(r.db).From({{ .PluralName }}.Table())
+}
+
+// SelectQuery runs a DSL query and scans rows into dest (SQL compiled at execution).
+func (r *{{ .RepoName }}) SelectQuery(ctx context.Context, dest any, q *goql.Query) error {
+	return r.db.SelectQuery(ctx, dest, q)
+}
+
+// GetQuery runs a DSL query and scans one row into dest (SQL compiled at execution).
+func (r *{{ .RepoName }}) GetQuery(ctx context.Context, dest any, q *goql.Query) error {
+	return r.db.GetQuery(ctx, dest, q)
 }
 
 // GetByID loads a single {{ .StructName }} by primary key.
@@ -110,7 +113,7 @@ func (r *{{ .RepoName }}) Delete(ctx context.Context) error {
 
 // WithTx returns a repository bound to a sqlx transaction.
 func (r *{{ .RepoName }}) WithTx(tx *sqlx.Tx) *{{ .RepoName }} {
-	return &{{ .RepoName }}{db: r.db.WithTx(tx), builder: r.db.WithTx(tx).NewBuilder()}
+	return &{{ .RepoName }}{db: r.db.WithTx(tx)}
 }
 
 {{ end }}

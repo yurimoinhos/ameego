@@ -5,9 +5,14 @@ import (
 	"unicode"
 )
 
-// StructName converts a table name to an exported Go struct name.
+// StructName converts a table name to an exported Go struct name (singular).
 func StructName(table string) string {
 	return toExported(singularize(stripSchema(table)))
+}
+
+// PluralStructName returns the exported table ref name (users → Users).
+func PluralStructName(table string) string {
+	return toExported(stripSchema(table))
 }
 
 // SQLConstName builds a const identifier for a named query SQL string.
@@ -110,5 +115,19 @@ func singularize(s string) string {
 		return s[:len(s)-1]
 	default:
 		return s
+	}
+}
+
+func pluralize(s string) string {
+	lower := strings.ToLower(s)
+	switch {
+	case strings.HasSuffix(lower, "y") && len(s) > 1:
+		return s[:len(s)-1] + "ies"
+	case strings.HasSuffix(lower, "s"), strings.HasSuffix(lower, "x"), strings.HasSuffix(lower, "ch"), strings.HasSuffix(lower, "sh"):
+		return s + "es"
+	case strings.HasSuffix(lower, "s"):
+		return s
+	default:
+		return s + "s"
 	}
 }

@@ -7,18 +7,6 @@ import (
 	"github.com/yurimoinhos/ameego/pkg/goql"
 )
 
-func TestBuilderSelect(t *testing.T) {
-	d := dialect.Postgres{}
-	b := goql.NewBuilderFromDialect(d)
-	query, args := b.Select("id", "email").From("users").WhereEq("email", "a@b.c").SQL()
-	if query == "" {
-		t.Fatal("empty query")
-	}
-	if len(args) != 1 {
-		t.Fatalf("args: %#v", args)
-	}
-}
-
 func TestNormalizePlaceholders(t *testing.T) {
 	sql, err := goql.NormalizePlaceholders("SELECT 1 WHERE id = $1 AND x = $2", "mssql")
 	if err != nil {
@@ -26,5 +14,13 @@ func TestNormalizePlaceholders(t *testing.T) {
 	}
 	if sql == "" {
 		t.Fatal("empty")
+	}
+}
+
+func TestInsertBuilder(t *testing.T) {
+	b := goql.NewBuilderFromDialect(dialect.Postgres{})
+	sql, args := b.Insert("users", []string{"id", "email"}).Values("1", "a@b.c").SQL()
+	if sql == "" || len(args) != 2 {
+		t.Fatalf("sql=%q args=%#v", sql, args)
 	}
 }

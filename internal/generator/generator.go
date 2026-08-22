@@ -44,6 +44,9 @@ type Config struct {
 // EntityView is the template view for a single table entity.
 type EntityView struct {
 	StructName    string
+	PluralName    string
+	RefTypeName   string
+	ColsTypeName  string
 	TableName     string
 	RepoName      string
 	Columns       []ColumnView
@@ -58,6 +61,16 @@ type EntityView struct {
 	InsertSQL     string
 	UpdateSQL     string
 	DeleteByIDSQL string
+}
+
+// NestedEntityView is a generated nested result struct for FK joins.
+type NestedEntityView struct {
+	StructName     string
+	ParentStruct   string
+	NestedStruct   string
+	NestedField    string
+	NestedPrefix   string
+	ParentColumns  []ColumnView
 }
 
 // ColumnView is the template view for a column.
@@ -96,6 +109,7 @@ type PackageView struct {
 	DialectName     string
 	ConfigPath      string
 	Entities        []EntityView
+	NestedEntities  []NestedEntityView
 	CustomQueries   []CustomQueryView
 	NeedsSQLImport  bool
 	NeedsTimeImport bool
@@ -133,6 +147,14 @@ func Generate(cfg Config) error {
 		if err := writeTemplate("entities.go.tmpl", filepath.Join(cfg.OutputDir, "entities_gen.go"), view); err != nil {
 			return err
 		}
+		if err := writeTemplate("refs.go.tmpl", filepath.Join(cfg.OutputDir, "refs_gen.go"), view); err != nil {
+			return err
+		}
+		if len(view.NestedEntities) > 0 {
+			if err := writeTemplate("nested.go.tmpl", filepath.Join(cfg.OutputDir, "nested_gen.go"), view); err != nil {
+				return err
+			}
+		}
 	}
 	if cfg.WithRepositories {
 		if err := writeTemplate("repositories.go.tmpl", filepath.Join(cfg.OutputDir, "repositories_gen.go"), view); err != nil {
@@ -166,6 +188,9 @@ func buildPackageView(cfg Config) (PackageView, error) {
 		colNames := make([]string, 0, len(table.Columns))
 		ev := EntityView{
 			StructName:  naming.StructName(table.Name),
+			PluralName:  naming.PluralStructName(table.Name),
+			RefTypeName: naming.VarName(naming.StructName(table.Name)) + "Ref",
+			ColsTypeName: naming.StructName(table.Name) + "Cols",
 			TableName:   table.Name,
 			RepoName:    naming.RepoName(table.Name),
 			PrimaryKey:  table.PrimaryKey,
@@ -211,16 +236,65 @@ func buildPackageView(cfg Config) (PackageView, error) {
 		return PackageView{}, err
 	}
 
+	nested := buildNestedEntities(cfg.Schema, entityByStruct)
+
 	return PackageView{
 		Package:         cfg.Package,
 		ModulePath:      cfg.ModulePath,
 		DialectName:     cfg.Dialect.Name(),
 		ConfigPath:      cfg.ConfigPath,
 		Entities:        entities,
+		NestedEntities:  nested,
 		CustomQueries:   customQueries,
 		NeedsSQLImport:  needsSQL,
 		NeedsTimeImport: needsTime,
 	}, nil
+}
+
+func buildNestedEntities(s *schema.Schema, entities map[string]*EntityView) []NestedEntityView {
+	tableByName := map[string]schema.Table{}
+	for _, t := range s.Tables {
+		tableByName[t.Name] = t
+	}
+
+	var out []NestedEntityView
+	for _, table := range s.Tables {
+		parent, ok := entities[naming.StructName(table.Name)]
+		if !ok {
+			continue
+		}
+		for _, col := range table.Columns {
+			if col.RefTable == "" {
+				continue
+			}
+			refTable, ok := tableByName[col.RefTable]
+			if !ok {
+				continue
+			}
+			nestedStruct := naming.StructName(refTable.Name)
+			nestedEntity, ok := entities[nestedStruct]
+			if !ok {
+				continue
+			}
+			out = append(out, NestedEntityView{
+				StructName:    parent.StructName + "With" + nestedStruct,
+				ParentStruct:  parent.StructName,
+				NestedStruct:  nestedStruct,
+				NestedField:   nestedStruct,
+				NestedPrefix:  defaultAlias(refTable.Name),
+				ParentColumns: parent.Columns,
+			})
+			_ = nestedEntity
+		}
+	}
+	return out
+}
+
+func defaultAlias(table string) string {
+	if i := strings.LastIndex(table, "."); i >= 0 {
+		table = table[i+1:]
+	}
+	return table
 }
 
 func buildCustomQueries(cfg Config, entities map[string]*EntityView) ([]CustomQueryView, error) {

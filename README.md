@@ -1,6 +1,8 @@
-# Goql
+# Ameego (Goql)
 
-Alternativa ao [sqlc](https://sqlc.dev) para Go: codegen de entidades e repositórios tipados a partir de **migrations SQL**, usando [sqlx](https://github.com/jmoiron/sqlx) — **sem reflection em runtime**. Tudo é resolvido em compile time via structs e métodos gerados.
+Alternativa ao [sqlc](https://sqlc.dev) para Go: codegen de entidades e repositórios tipados a partir de **migrations SQL**, usando [sqlx](https://github.com/jmoiron/sqlx) — **sem reflection em runtime**.
+
+**Módulo:** `github.com/yurimoinhos/ameego`
 
 Configuração via **`goql.yaml`**, queries customizadas via arquivos **`.sql`**, e SQL nativo gerado por **SQL Builder** em codegen (CRUD) e runtime (queries dinâmicas).
 
@@ -94,7 +96,64 @@ Parâmetros em `-- params:` são mapeados para tipos Go via colunas da entidade 
 
 O SQL é normalizado para o dialect configurado (`$1` → `@p1` no MSSQL, `?` no MySQL).
 
-## SQL Builder (alta performance)
+## DSL de consulta (`Users.Ref.Id`)
+
+Referências tipadas geradas em `refs_gen.go` — **sem struct separada**:
+
+```go
+generated.Users.Ref.Id
+generated.Users.Ref.Email
+generated.Roles.Ref.Name
+generated.Users.Table()
+```
+
+O SQL **não** é materializado com `.SQL()`. A compilação ocorre em `SelectQuery` / `GetQuery`:
+
+```go
+var rows []generated.UserWithRole
+
+err := users.SelectQuery(ctx, &rows,
+    users.Query().
+        Select(
+            generated.Users.Ref.Id,
+            generated.Users.Ref.Email,
+            generated.Roles.Ref.Id,
+            generated.Roles.Ref.Name,
+        ).
+        Join(goql.JoinLeft, generated.Roles.Ref.Id, generated.Users.Ref.RoleId).
+        Where(generated.Users.Ref.Active, goql.Equals, true).
+        OrderBy(generated.Users.Ref.CreatedAt, true).
+        Limit(10),
+)
+```
+
+### Dados aninhados
+
+FKs nas migrations geram structs aninhados em `nested_gen.go`:
+
+```go
+type UserWithRole struct {
+    Id    string `db:"id"`
+    Email string `db:"email"`
+    // ...
+    Role  Role   `db:"roles."`  // sqlx prefix → roles.id, roles.name
+}
+```
+
+Colunas da tabela joinada recebem alias `roles.id`, `roles.name`, etc., mapeados pelo prefixo `db:"roles."`.
+
+### Comparadores e joins
+
+```go
+goql.Equals       goql.NotEquals
+goql.GreaterThan  goql.LessThan
+goql.Like         goql.IsNull
+
+goql.JoinInner    goql.JoinLeft
+goql.JoinRight    goql.JoinFull
+```
+
+## SQL Builder (CRUD interno)
 
 ### Codegen (CRUD)
 
@@ -110,22 +169,9 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (User, error) {
 }
 ```
 
-### Runtime (queries dinâmicas)
+### Runtime (queries dinâmicas — legado INSERT)
 
-Cada repositório expõe `Builder()` para compor SQL nativo sem reflection:
-
-```go
-query, args := r.Builder().
-    Select("id", "email").
-    From("users").
-    WhereEq("active", true).
-    OrderBy("created_at", true).
-    Limit(10).
-    SQL()
-
-var rows []User
-err := r.db.SelectContext(ctx, &rows, query, args...)
-```
+O builder antigo `Select().From().SQL()` foi substituído pela DSL acima. `Builder()` permanece apenas para INSERT programático se necessário.
 
 ## Uso
 

@@ -93,9 +93,21 @@ func (db *DB) GetContext(ctx context.Context, dest any, query string, args ...an
 	return db.inner.GetContext(ctx, dest, query, args...)
 }
 
-// SelectContext scans rows into dest using sqlx struct tags.
+// SelectContext scans rows using sqlx struct tags.
 func (db *DB) SelectContext(ctx context.Context, dest any, query string, args ...any) error {
 	return db.inner.SelectContext(ctx, dest, query, args...)
+}
+
+// SelectQuery executes a deferred DSL query and scans rows into dest.
+func (db *DB) SelectQuery(ctx context.Context, dest any, q *Query) error {
+	sql, args := q.compile()
+	return db.inner.SelectContext(ctx, dest, sql, args...)
+}
+
+// GetQuery executes a deferred DSL query and scans one row into dest.
+func (db *DB) GetQuery(ctx context.Context, dest any, q *Query) error {
+	sql, args := q.compile()
+	return db.inner.GetContext(ctx, dest, sql, args...)
 }
 
 // ExecContext executes a statement.

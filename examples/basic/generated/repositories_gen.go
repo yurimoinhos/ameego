@@ -11,39 +11,40 @@ import (
 
 // UserRepository provides compile-time typed CRUD for users.
 type UserRepository struct {
-	db      *goql.DB
-	builder *goql.Builder
+	db *goql.DB
 }
 
 // NewUserRepository creates a repository for users.
 func NewUserRepository(db *goql.DB) *UserRepository {
-	return &UserRepository{db: db, builder: db.NewBuilder()}
+	return &UserRepository{db: db}
 }
 
 const userTable = `users`
 
-const userSelectAllSQL = `SELECT "id", "email", "name", "active", "created_at" FROM "users"`
-const userSelectByIDSQL = `SELECT "id", "email", "name", "active", "created_at" FROM "users" WHERE "id" = $1`
+const userSelectAllSQL = `SELECT "id", "email", "name", "active", "created_at", "role_id" FROM "users"`
+const userSelectByIDSQL = `SELECT "id", "email", "name", "active", "created_at", "role_id" FROM "users" WHERE "id" = $1`
 const userDeleteByIDSQL = `DELETE FROM "users" WHERE "id" = $1`
-const userInsertSQL = `INSERT INTO "users" ("id", "email", "name", "active", "created_at") VALUES ($1, $2, $3, $4, $5)`
-const userUpdateSQL = `UPDATE "users" SET "email" = $1, "name" = $2, "active" = $3, "created_at" = $4 WHERE "id" = $5`
-
-var userColumns = []string{
-	`id`,
-	`email`,
-	`name`,
-	`active`,
-	`created_at`,
-}
+const userInsertSQL = `INSERT INTO "users" ("id", "email", "name", "active", "created_at", "role_id") VALUES ($1, $2, $3, $4, $5, $6)`
+const userUpdateSQL = `UPDATE "users" SET "email" = $1, "name" = $2, "active" = $3, "created_at" = $4, "role_id" = $5 WHERE "id" = $6`
 
 // TableName returns the database table name.
 func (r *UserRepository) TableName() string {
 	return userTable
 }
 
-// Builder returns the dialect-native SQL builder for dynamic queries.
-func (r *UserRepository) Builder() *goql.Builder {
-	return r.builder
+// Query starts a deferred DSL query rooted at users.
+func (r *UserRepository) Query() *goql.Query {
+	return goql.NewQuery(r.db).From(Users.Table())
+}
+
+// SelectQuery runs a DSL query and scans rows into dest (SQL compiled at execution).
+func (r *UserRepository) SelectQuery(ctx context.Context, dest any, q *goql.Query) error {
+	return r.db.SelectQuery(ctx, dest, q)
+}
+
+// GetQuery runs a DSL query and scans one row into dest (SQL compiled at execution).
+func (r *UserRepository) GetQuery(ctx context.Context, dest any, q *goql.Query) error {
+	return r.db.GetQuery(ctx, dest, q)
 }
 
 // GetByID loads a single User by primary key.
@@ -68,6 +69,7 @@ func (r *UserRepository) Insert(ctx context.Context, entity *User) error {
 		entity.Name,
 		entity.Active,
 		entity.CreatedAt,
+		entity.RoleId,
 	)
 	return err
 }
@@ -79,6 +81,7 @@ func (r *UserRepository) Update(ctx context.Context, entity *User) error {
 		entity.Name,
 		entity.Active,
 		entity.CreatedAt,
+		entity.RoleId,
 		entity.Id,
 	)
 	return err
@@ -92,18 +95,17 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 
 // WithTx returns a repository bound to a sqlx transaction.
 func (r *UserRepository) WithTx(tx *sqlx.Tx) *UserRepository {
-	return &UserRepository{db: r.db.WithTx(tx), builder: r.db.WithTx(tx).NewBuilder()}
+	return &UserRepository{db: r.db.WithTx(tx)}
 }
 
 // OrderRepository provides compile-time typed CRUD for orders.
 type OrderRepository struct {
-	db      *goql.DB
-	builder *goql.Builder
+	db *goql.DB
 }
 
 // NewOrderRepository creates a repository for orders.
 func NewOrderRepository(db *goql.DB) *OrderRepository {
-	return &OrderRepository{db: db, builder: db.NewBuilder()}
+	return &OrderRepository{db: db}
 }
 
 const orderTable = `orders`
@@ -114,24 +116,24 @@ const orderDeleteByIDSQL = `DELETE FROM "orders" WHERE "id" = $1`
 const orderInsertSQL = `INSERT INTO "orders" ("id", "user_id", "total", "status", "notes", "placed_at", "updated_at") VALUES ($1, $2, $3, $4, $5, $6, $7)`
 const orderUpdateSQL = `UPDATE "orders" SET "user_id" = $1, "total" = $2, "status" = $3, "notes" = $4, "placed_at" = $5, "updated_at" = $6 WHERE "id" = $7`
 
-var orderColumns = []string{
-	`id`,
-	`user_id`,
-	`total`,
-	`status`,
-	`notes`,
-	`placed_at`,
-	`updated_at`,
-}
-
 // TableName returns the database table name.
 func (r *OrderRepository) TableName() string {
 	return orderTable
 }
 
-// Builder returns the dialect-native SQL builder for dynamic queries.
-func (r *OrderRepository) Builder() *goql.Builder {
-	return r.builder
+// Query starts a deferred DSL query rooted at orders.
+func (r *OrderRepository) Query() *goql.Query {
+	return goql.NewQuery(r.db).From(Orders.Table())
+}
+
+// SelectQuery runs a DSL query and scans rows into dest (SQL compiled at execution).
+func (r *OrderRepository) SelectQuery(ctx context.Context, dest any, q *goql.Query) error {
+	return r.db.SelectQuery(ctx, dest, q)
+}
+
+// GetQuery runs a DSL query and scans one row into dest (SQL compiled at execution).
+func (r *OrderRepository) GetQuery(ctx context.Context, dest any, q *goql.Query) error {
+	return r.db.GetQuery(ctx, dest, q)
 }
 
 // GetByID loads a single Order by primary key.
@@ -184,5 +186,88 @@ func (r *OrderRepository) Delete(ctx context.Context, id int64) error {
 
 // WithTx returns a repository bound to a sqlx transaction.
 func (r *OrderRepository) WithTx(tx *sqlx.Tx) *OrderRepository {
-	return &OrderRepository{db: r.db.WithTx(tx), builder: r.db.WithTx(tx).NewBuilder()}
+	return &OrderRepository{db: r.db.WithTx(tx)}
+}
+
+// RoleRepository provides compile-time typed CRUD for roles.
+type RoleRepository struct {
+	db *goql.DB
+}
+
+// NewRoleRepository creates a repository for roles.
+func NewRoleRepository(db *goql.DB) *RoleRepository {
+	return &RoleRepository{db: db}
+}
+
+const roleTable = `roles`
+
+const roleSelectAllSQL = `SELECT "id", "name", "active" FROM "roles"`
+const roleSelectByIDSQL = `SELECT "id", "name", "active" FROM "roles" WHERE "id" = $1`
+const roleDeleteByIDSQL = `DELETE FROM "roles" WHERE "id" = $1`
+const roleInsertSQL = `INSERT INTO "roles" ("id", "name", "active") VALUES ($1, $2, $3)`
+const roleUpdateSQL = `UPDATE "roles" SET "name" = $1, "active" = $2 WHERE "id" = $3`
+
+// TableName returns the database table name.
+func (r *RoleRepository) TableName() string {
+	return roleTable
+}
+
+// Query starts a deferred DSL query rooted at roles.
+func (r *RoleRepository) Query() *goql.Query {
+	return goql.NewQuery(r.db).From(Roles.Table())
+}
+
+// SelectQuery runs a DSL query and scans rows into dest (SQL compiled at execution).
+func (r *RoleRepository) SelectQuery(ctx context.Context, dest any, q *goql.Query) error {
+	return r.db.SelectQuery(ctx, dest, q)
+}
+
+// GetQuery runs a DSL query and scans one row into dest (SQL compiled at execution).
+func (r *RoleRepository) GetQuery(ctx context.Context, dest any, q *goql.Query) error {
+	return r.db.GetQuery(ctx, dest, q)
+}
+
+// GetByID loads a single Role by primary key.
+func (r *RoleRepository) GetByID(ctx context.Context, id string) (Role, error) {
+	var row Role
+	err := r.db.GetContext(ctx, &row, roleSelectByIDSQL, id)
+	return row, err
+}
+
+// FindAll returns all rows from roles.
+func (r *RoleRepository) FindAll(ctx context.Context) ([]Role, error) {
+	var rows []Role
+	err := r.db.SelectContext(ctx, &rows, roleSelectAllSQL)
+	return rows, err
+}
+
+// Insert persists a new Role row.
+func (r *RoleRepository) Insert(ctx context.Context, entity *Role) error {
+	_, err := r.db.ExecContext(ctx, roleInsertSQL,
+		entity.Id,
+		entity.Name,
+		entity.Active,
+	)
+	return err
+}
+
+// Update modifies an existing Role row by primary key.
+func (r *RoleRepository) Update(ctx context.Context, entity *Role) error {
+	_, err := r.db.ExecContext(ctx, roleUpdateSQL,
+		entity.Name,
+		entity.Active,
+		entity.Id,
+	)
+	return err
+}
+
+// Delete removes a row from roles by primary key.
+func (r *RoleRepository) Delete(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx, roleDeleteByIDSQL, id)
+	return err
+}
+
+// WithTx returns a repository bound to a sqlx transaction.
+func (r *RoleRepository) WithTx(tx *sqlx.Tx) *RoleRepository {
+	return &RoleRepository{db: r.db.WithTx(tx)}
 }

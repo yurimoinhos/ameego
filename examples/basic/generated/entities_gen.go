@@ -3,7 +3,6 @@
 package generated
 
 import (
-	"database/sql"
 	"time"
 )
 
@@ -14,15 +13,23 @@ type User struct {
 	Name      string    `db:"name"`
 	Active    bool      `db:"active"`
 	CreatedAt time.Time `db:"created_at"`
+	RoleId    string    `db:"role_id"`
 }
 
 // Order maps to table orders.
 type Order struct {
-	Id        int64        `db:"id"`
-	UserId    string       `db:"user_id"`
-	Total     string       `db:"total"`
-	Status    string       `db:"status"`
-	Notes     string       `db:"notes"`
-	PlacedAt  time.Time    `db:"placed_at"`
-	UpdatedAt sql.NullTime `db:"updated_at"`
+	Id        int64     `db:"id"`
+	UserId    string    `db:"user_id"`
+	Total     string    `db:"total"`
+	Status    string    `db:"status"`
+	Notes     string    `db:"notes"`
+	PlacedAt  time.Time `db:"placed_at"`
+	UpdatedAt string    `db:"updated_at"`
+}
+
+// Role maps to table roles.
+type Role struct {
+	Id     string `db:"id"`
+	Name   string `db:"name"`
+	Active bool   `db:"active"`
 }

@@ -13,12 +13,13 @@ import (
 
 var (
 	createTableRe = regexp.MustCompile(`(?is)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([` + "`" + `"\[]?[\w.]+[` + "`" + `"\]]?)\s*\((.*?)\)\s*(?:;|$)`)
-	alterAddColRe = regexp.MustCompile(`(?is)ALTER\s+TABLE\s+([` + "`" + `"\[]?[\w.]+[` + "`" + `"\]]?)\s+ADD\s+(?:COLUMN\s+)?(\w+)\s+([\w()]+(?:\s*\(\s*[\d,\s]+\s*\))?)`)
+	alterAddColRe = regexp.MustCompile(`(?is)ALTER\s+TABLE\s+([` + "`" + `"\[]?[\w.]+[` + "`" + `"\]]?)\s+ADD\s+(?:COLUMN\s+)?(\w+)\s+(.+?)(?:;|$)`)
 	pkInlineRe    = regexp.MustCompile(`(?is)PRIMARY\s+KEY\s*\(([^)]+)\)`)
 	pkColRe       = regexp.MustCompile(`(?is)PRIMARY\s+KEY`)
 	autoIncrRe    = regexp.MustCompile(`(?is)(?:SERIAL|BIGSERIAL|SMALLSERIAL|IDENTITY|AUTO_INCREMENT|AUTOINCREMENT)`)
 	notNullRe     = regexp.MustCompile(`(?is)\bNOT\s+NULL\b`)
 	defaultRe     = regexp.MustCompile(`(?is)\bDEFAULT\s+([^,\n]+)`)
+	referencesRe  = regexp.MustCompile(`(?is)REFERENCES\s+([` + "`" + `"\[]?[\w.]+[` + "`" + `"\]]?)\s*\(\s*([` + "`" + `"\w]+[` + "`" + `"]?)\s*\)`)
 )
 
 // Options configures migration parsing.
@@ -74,18 +75,24 @@ func applySQL(sql string, tables map[string]*schema.Table, order *[]string) {
 	for _, m := range alterAddColRe.FindAllStringSubmatch(sql, -1) {
 		rawName := unquoteIdent(m[1])
 		colName := m[2]
-		colType := strings.TrimSpace(m[3])
+		line := strings.TrimSpace(m[3])
+		colType := extractSQLType(line, strings.Fields(line))
+		col := schema.Column{
+			Name:     colName,
+			SQLType:  colType,
+			Nullable: !notNullRe.MatchString(line),
+		}
+		if rm := referencesRe.FindStringSubmatch(line); len(rm) == 3 {
+			col.RefTable = unquoteIdent(rm[1])
+			col.RefColumn = unquoteIdent(rm[2])
+		}
 		table, ok := tables[rawName]
 		if !ok {
 			table = &schema.Table{Name: rawName}
 			tables[rawName] = table
 			*order = append(*order, rawName)
 		}
-		table.Columns = append(table.Columns, schema.Column{
-			Name:     colName,
-			SQLType:  colType,
-			Nullable: !notNullRe.MatchString(colType),
-		})
+		table.Columns = append(table.Columns, col)
 	}
 }
 
@@ -128,6 +135,10 @@ func parseTableBody(name, body string) *schema.Table {
 		}
 		if dm := defaultRe.FindStringSubmatch(line); len(dm) == 2 {
 			col.Default = strings.TrimSpace(dm[1])
+		}
+		if rm := referencesRe.FindStringSubmatch(line); len(rm) == 3 {
+			col.RefTable = unquoteIdent(rm[1])
+			col.RefColumn = unquoteIdent(rm[2])
 		}
 		table.Columns = append(table.Columns, col)
 	}
