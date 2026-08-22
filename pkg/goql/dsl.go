@@ -74,6 +74,11 @@ func TableOf(name string) Table {
 	return Table{name: name, alias: defaultAlias(name)}
 }
 
+// TableAs creates a table reference with an explicit SQL alias (e.g. subquery FROM aliases).
+func TableAs(name, alias string) Table {
+	return Table{name: name, alias: alias}
+}
+
 // Name returns the physical table name.
 func (t Table) Name() string { return t.name }
 

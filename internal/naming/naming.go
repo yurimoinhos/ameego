@@ -48,6 +48,15 @@ func ColumnTag(column string) string {
 	return strings.ToLower(column)
 }
 
+// PackageName returns a lowercase Go package name for a table or routine identifier.
+func PackageName(name string) string {
+	s := strings.ToLower(stripSchema(name))
+	s = strings.ReplaceAll(s, "-", "_")
+	if s == "" {
+		return "unknown"
+	}
+	return s
+}
 func stripSchema(name string) string {
 	if idx := strings.LastIndex(name, "."); idx >= 0 {
 		return name[idx+1:]

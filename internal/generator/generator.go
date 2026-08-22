@@ -18,13 +18,19 @@ import (
 	"github.com/yurimoinhos/ameego/pkg/goql"
 )
 
-//go:embed templates/*.tmpl
+//go:embed templates/*.tmpl templates/root/*.tmpl templates/table/*.tmpl templates/routine/*.tmpl
 var templateFS embed.FS
 
 // QueryBinding associates parsed queries with an entity.
 type QueryBinding struct {
 	Entity  string
 	Queries []parser.NamedQuery
+}
+
+// RoutineBinding associates parsed routines with a source file.
+type RoutineBinding struct {
+	SourceFile string
+	Routines   []parser.ParsedRoutine
 }
 
 // Config controls code generation output.
@@ -38,7 +44,9 @@ type Config struct {
 	WithQueries      bool
 	WithEntities     bool
 	WithRepositories bool
+	WithRoutines     bool
 	QueryBindings    []QueryBinding
+	RoutineBindings  []RoutineBinding
 }
 
 // EntityView is the template view for a single table entity.
@@ -81,6 +89,22 @@ type ColumnView struct {
 	SQLName   string
 }
 
+// RoutineView is the template view for a database routine.
+type RoutineView struct {
+	Name            string
+	MethodName      string
+	Kind            string
+	ResultKind      string
+	QualifiedName   string
+	DefinitionSQL   string
+	InvokeSQL       string
+	SQLConstName    string
+	InvokeConstName string
+	SourceFile      string
+	ReturnGoType    string
+	Params          []ParamView
+}
+
 // CustomQueryView is the template view for a custom SQL query method.
 type CustomQueryView struct {
 	Name          string
@@ -102,7 +126,33 @@ type ParamView struct {
 	GoType    string
 }
 
-// PackageView is the root template view.
+// TableView is the template view for a single table package.
+type TableView struct {
+	Package         string
+	Entity          EntityView
+	NestedEntities  []NestedEntityView
+	CustomQueries   []CustomQueryView
+	NeedsSQLImport  bool
+	NeedsTimeImport bool
+}
+
+// RoutinePackageView is the template view for a single routine package.
+type RoutinePackageView struct {
+	Package string
+	Routine RoutineView
+}
+
+// RootView is the root doc package view.
+type RootView struct {
+	Package           string
+	ConfigPath        string
+	TablesImportPath  string
+	FunctionsPath     string
+	ProceduresPath    string
+	TriggersPath      string
+}
+
+// PackageView is the aggregate view used while building output.
 type PackageView struct {
 	Package         string
 	ModulePath      string
@@ -111,14 +161,15 @@ type PackageView struct {
 	Entities        []EntityView
 	NestedEntities  []NestedEntityView
 	CustomQueries   []CustomQueryView
+	Routines        []RoutineView
 	NeedsSQLImport  bool
 	NeedsTimeImport bool
 }
 
-// Generate writes all generated Go files to OutputDir.
+// Generate writes per-table and per-routine Go packages under OutputDir.
 func Generate(cfg Config) error {
 	if cfg.Package == "" {
-		cfg.Package = "generated"
+		cfg.Package = "store"
 	}
 	if cfg.OutputDir == "" {
 		return fmt.Errorf("output directory is required")
@@ -129,8 +180,8 @@ func Generate(cfg Config) error {
 	if cfg.Dialect == nil {
 		return fmt.Errorf("dialect is required")
 	}
-	if !cfg.WithEntities && !cfg.WithRepositories && !cfg.WithQueries && len(cfg.QueryBindings) == 0 {
-		return fmt.Errorf("nothing to generate: enable entities, repositories, query_helpers, or add queries in goql.yaml")
+	if !cfg.WithEntities && !cfg.WithRepositories && !cfg.WithQueries && !cfg.WithRoutines && len(cfg.QueryBindings) == 0 && len(cfg.RoutineBindings) == 0 {
+		return fmt.Errorf("nothing to generate: enable entities, repositories, query_helpers, routines, or add queries/routines in ameego.yaml")
 	}
 
 	dialect.ApplyGoTypes(cfg.Dialect, cfg.Schema)
@@ -143,38 +194,137 @@ func Generate(cfg Config) error {
 		return fmt.Errorf("mkdir output: %w", err)
 	}
 
-	if cfg.WithEntities {
-		if err := writeTemplate("entities.go.tmpl", filepath.Join(cfg.OutputDir, "entities_gen.go"), view); err != nil {
-			return err
+	tablesBase := "tables"
+	functionsBase := "functions"
+	proceduresBase := "procedures"
+	triggersBase := "triggers"
+	if cfg.ModulePath != "" {
+		tablesBase = cfg.ModulePath + "/tables"
+		functionsBase = cfg.ModulePath + "/functions"
+		proceduresBase = cfg.ModulePath + "/procedures"
+		triggersBase = cfg.ModulePath + "/triggers"
+	}
+
+	root := RootView{
+		Package:          cfg.Package,
+		ConfigPath:       cfg.ConfigPath,
+		TablesImportPath: tablesBase,
+		FunctionsPath:    functionsBase,
+		ProceduresPath:   proceduresBase,
+		TriggersPath:     triggersBase,
+	}
+	if err := writeTemplate("root/doc.go.tmpl", filepath.Join(cfg.OutputDir, "doc_gen.go"), root); err != nil {
+		return err
+	}
+
+	queriesByEntity := map[string][]CustomQueryView{}
+	for _, q := range view.CustomQueries {
+		queriesByEntity[q.StructName] = append(queriesByEntity[q.StructName], q)
+	}
+	nestedByParent := map[string][]NestedEntityView{}
+	for _, n := range view.NestedEntities {
+		nestedByParent[n.ParentStruct] = append(nestedByParent[n.ParentStruct], n)
+	}
+
+	for _, entity := range view.Entities {
+		pkg := naming.PackageName(entity.TableName)
+		dir := filepath.Join(cfg.OutputDir, "tables", pkg)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("mkdir table package %s: %w", pkg, err)
 		}
-		if err := writeTemplate("refs.go.tmpl", filepath.Join(cfg.OutputDir, "refs_gen.go"), view); err != nil {
-			return err
+
+		needsSQL, needsTime := entityImports(entity)
+		tableView := TableView{
+			Package:         pkg,
+			Entity:          entity,
+			NestedEntities:  nestedByParent[entity.StructName],
+			CustomQueries:   queriesByEntity[entity.StructName],
+			NeedsSQLImport:  needsSQL,
+			NeedsTimeImport: needsTime,
 		}
-		if len(view.NestedEntities) > 0 {
-			if err := writeTemplate("nested.go.tmpl", filepath.Join(cfg.OutputDir, "nested_gen.go"), view); err != nil {
+
+		if cfg.WithEntities {
+			if err := writeTemplate("table/entity.go.tmpl", filepath.Join(dir, "entity_gen.go"), tableView); err != nil {
+				return err
+			}
+			if err := writeTemplate("table/refs.go.tmpl", filepath.Join(dir, "refs_gen.go"), tableView); err != nil {
+				return err
+			}
+			if len(tableView.NestedEntities) > 0 {
+				if err := writeTemplate("table/nested.go.tmpl", filepath.Join(dir, "nested_gen.go"), tableView); err != nil {
+					return err
+				}
+			}
+		}
+		if cfg.WithRepositories {
+			if err := writeTemplate("table/repository.go.tmpl", filepath.Join(dir, "repository_gen.go"), tableView); err != nil {
+				return err
+			}
+		}
+		if cfg.WithQueries && entity.HasSinglePK {
+			if err := writeTemplate("table/queries.go.tmpl", filepath.Join(dir, "queries_gen.go"), tableView); err != nil {
+				return err
+			}
+		}
+		if len(tableView.CustomQueries) > 0 {
+			if err := writeTemplate("table/custom_queries_sql.go.tmpl", filepath.Join(dir, "custom_queries_sql_gen.go"), tableView); err != nil {
+				return err
+			}
+			if err := writeTemplate("table/custom_queries.go.tmpl", filepath.Join(dir, "custom_queries_gen.go"), tableView); err != nil {
 				return err
 			}
 		}
 	}
-	if cfg.WithRepositories {
-		if err := writeTemplate("repositories.go.tmpl", filepath.Join(cfg.OutputDir, "repositories_gen.go"), view); err != nil {
+
+	for _, routine := range view.Routines {
+		if !cfg.WithRoutines && routine.Kind != string(dialect.RoutineTrigger) {
+			continue
+		}
+		subdir, tmpl := routineOutput(routine.Kind)
+		pkg := naming.PackageName(routine.Name)
+		dir := filepath.Join(cfg.OutputDir, subdir, pkg)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("mkdir routine package %s: %w", pkg, err)
+		}
+		routineView := RoutinePackageView{Package: pkg, Routine: routine}
+		if routine.Kind == string(dialect.RoutineTrigger) {
+			if err := writeTemplate("routine/trigger.go.tmpl", filepath.Join(dir, "trigger_gen.go"), routineView); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := writeTemplate("routine/routine_sql.go.tmpl", filepath.Join(dir, "routine_sql_gen.go"), routineView); err != nil {
+			return err
+		}
+		if err := writeTemplate(tmpl, filepath.Join(dir, "routine_gen.go"), routineView); err != nil {
 			return err
 		}
 	}
-	if cfg.WithQueries {
-		if err := writeTemplate("queries.go.tmpl", filepath.Join(cfg.OutputDir, "queries_gen.go"), view); err != nil {
-			return err
+
+	return nil
+}
+
+func routineOutput(kind string) (subdir, tmpl string) {
+	switch kind {
+	case string(dialect.RoutineProcedure):
+		return "procedures", "routine/procedure.go.tmpl"
+	case string(dialect.RoutineTrigger):
+		return "triggers", "routine/trigger.go.tmpl"
+	default:
+		return "functions", "routine/function.go.tmpl"
+	}
+}
+
+func entityImports(entity EntityView) (needsSQL, needsTime bool) {
+	for _, col := range entity.Columns {
+		if strings.HasPrefix(col.GoType, "sql.Null") {
+			needsSQL = true
+		}
+		if col.GoType == "time.Time" || col.GoType == "sql.NullTime" {
+			needsTime = true
 		}
 	}
-	if len(view.CustomQueries) > 0 {
-		if err := writeTemplate("custom_queries_sql.go.tmpl", filepath.Join(cfg.OutputDir, "custom_queries_sql_gen.go"), view); err != nil {
-			return err
-		}
-		if err := writeTemplate("custom_queries.go.tmpl", filepath.Join(cfg.OutputDir, "custom_queries_gen.go"), view); err != nil {
-			return err
-		}
-	}
-	return writeTemplate("doc.go.tmpl", filepath.Join(cfg.OutputDir, "doc_gen.go"), view)
+	return needsSQL, needsTime
 }
 
 func buildPackageView(cfg Config) (PackageView, error) {
@@ -236,6 +386,11 @@ func buildPackageView(cfg Config) (PackageView, error) {
 		return PackageView{}, err
 	}
 
+	routines, err := buildRoutines(cfg)
+	if err != nil {
+		return PackageView{}, err
+	}
+
 	nested := buildNestedEntities(cfg.Schema, entityByStruct)
 
 	return PackageView{
@@ -246,6 +401,7 @@ func buildPackageView(cfg Config) (PackageView, error) {
 		Entities:        entities,
 		NestedEntities:  nested,
 		CustomQueries:   customQueries,
+		Routines:        routines,
 		NeedsSQLImport:  needsSQL,
 		NeedsTimeImport: needsTime,
 	}, nil
@@ -295,6 +451,59 @@ func defaultAlias(table string) string {
 		table = table[i+1:]
 	}
 	return table
+}
+
+func buildRoutines(cfg Config) ([]RoutineView, error) {
+	var out []RoutineView
+	seen := map[string]struct{}{}
+
+	for _, binding := range cfg.RoutineBindings {
+		for _, r := range binding.Routines {
+			if !cfg.WithRoutines && r.Kind != dialect.RoutineTrigger {
+				continue
+			}
+			key := string(r.Kind) + "." + r.Name
+			if _, dup := seen[key]; dup {
+				return nil, fmt.Errorf("duplicate routine %q", r.Name)
+			}
+			seen[key] = struct{}{}
+
+			invokeSQL, err := goql.NormalizePlaceholders(r.InvokeSQL, cfg.Dialect.Name())
+			if err != nil && r.Kind != dialect.RoutineTrigger {
+				return nil, fmt.Errorf("routine %q: %w", r.Name, err)
+			}
+
+			params := make([]ParamView, len(r.ParamNames))
+			for i, name := range r.ParamNames {
+				goType := "string"
+				if i < len(r.ParamTypes) {
+					goType = r.ParamTypes[i]
+				}
+				params[i] = ParamView{
+					Name:      name,
+					VarName:   naming.VarName(name),
+					FieldName: naming.FieldName(name),
+					GoType:    goType,
+				}
+			}
+
+			out = append(out, RoutineView{
+				Name:            r.Name,
+				MethodName:      r.MethodName,
+				Kind:            string(r.Kind),
+				ResultKind:      string(r.ResultKind),
+				QualifiedName:   r.QualifiedName,
+				DefinitionSQL:   r.DefinitionSQL,
+				InvokeSQL:       invokeSQL,
+				SQLConstName:    naming.SQLConstName("Routine", r.Name) + "DefSQL",
+				InvokeConstName: naming.SQLConstName("Routine", r.Name) + "InvokeSQL",
+				SourceFile:      filepath.Base(r.SourceFile),
+				ReturnGoType:    r.ReturnGoType,
+				Params:          params,
+			})
+		}
+	}
+	return out, nil
 }
 
 func buildCustomQueries(cfg Config, entities map[string]*EntityView) ([]CustomQueryView, error) {

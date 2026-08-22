@@ -1,4 +1,4 @@
-# Ameego (Goql)
+# Ameego
 
 Alternativa ao [sqlc](https://sqlc.dev) para Go: codegen de entidades e repositórios tipados a partir de **migrations SQL**, usando [sqlx](https://github.com/jmoiron/sqlx) — **sem reflection em runtime**.
 
@@ -8,9 +8,41 @@ Configuração via **`goql.yaml`**, queries customizadas via arquivos **`.sql`**
 
 ## Instalação
 
+O CLI é um binário Go instalável com `go install`. O Go compila o pacote
+`main` e coloca o executável em `$GOBIN` (ou `$GOPATH/bin`).
+
 ```bash
+# binário ameego (recomendado)
+go install github.com/yurimoinhos/ameego/cmd/ameego@latest
+
+# alias legado — instala como goql
 go install github.com/yurimoinhos/ameego/cmd/goql@latest
 ```
+
+Confirme que o diretório de binários está no `PATH`:
+
+```bash
+# zsh/bash — adicione ao ~/.zshrc ou ~/.bashrc se necessário
+export PATH="$(go env GOPATH)/bin:$PATH"
+
+ameego version
+ameego generate
+```
+
+Desenvolvimento local (a partir deste repositório):
+
+```bash
+make install          # go install ./cmd/ameego
+make install-goql     # go install ./cmd/goql
+```
+
+Sem instalar globalmente, use `go run`:
+
+```bash
+go run github.com/yurimoinhos/ameego/cmd/ameego generate
+```
+
+Documentação da CLI (incl. release notes): [pkg.go.dev/github.com/yurimoinhos/ameego/cmd/goql](https://pkg.go.dev/github.com/yurimoinhos/ameego/cmd/goql)
 
 ## Configuração (`goql.yaml`)
 
@@ -123,9 +155,47 @@ err := users.SelectQuery(ctx, &rows,
         Join(goql.JoinLeft, generated.Roles.Ref.Id, generated.Users.Ref.RoleId).
         Where(generated.Users.Ref.Active, goql.Equals, true).
         OrderBy(generated.Users.Ref.CreatedAt, true).
-        Limit(10),
+        Paginate(1, 10),   // página 1, 10 itens — exclusivo com Offset/Limit
 )
 ```
+
+### Paginação
+
+Três modos, **mutuamente exclusivos**:
+
+```go
+// Por página (1-indexed) — recomendado para APIs
+q.Paginate(page, size)
+
+// Por offset/limit — não combinar com Paginate
+q.Offset(20).Limit(10)
+```
+
+No **MSSQL**, paginação exige `OrderBy`. O SQL gerado usa `OFFSET … ROWS FETCH NEXT … ROWS ONLY`.
+
+### Subqueries
+
+```go
+inner := db.Query().
+    Select(generated.Users.Ref.Id).
+    From(generated.Users.Table()).
+    Where(generated.Users.Ref.Active, goql.Equals, true)
+
+rows, err := db.SelectQuery(ctx, &dest,
+    db.Query().
+        Select(goql.ColOf(goql.TableAs("users", "active_users"), "id")).
+        FromSub(goql.AsSubquery(inner, "active_users")).
+        WhereIn(generated.Users.Ref.Id, inner),
+)
+```
+
+| Método | Uso |
+|---|---|
+| `FromSub` | `FROM (SELECT …) AS alias` — exclusivo com `From` |
+| `SelectSub` | coluna escalar `(SELECT …) AS alias` |
+| `WhereIn` / `WhereNotIn` | `col IN (SELECT …)` |
+| `WhereExists` / `WhereNotExists` | `EXISTS (SELECT …)` |
+| `TableAs(name, alias)` | refs de coluna contra alias de subquery |
 
 ### Dados aninhados
 
@@ -211,7 +281,7 @@ row, err := users.GetByID(ctx, "01JABC...")         // CRUD gerado
 ## Arquitetura
 
 ```
-cmd/goql/              CLI (goql.yaml + flags)
+cmd/goql/              CLI ameego (goql.yaml + flags)
 internal/
   config/              Loader goql.yaml
   parser/              Migrations + query SQL files

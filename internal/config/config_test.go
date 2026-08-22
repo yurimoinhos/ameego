@@ -19,7 +19,7 @@ func TestLoadExampleConfig(t *testing.T) {
 	if len(cfg.Queries) != 2 {
 		t.Fatalf("expected 2 query bindings, got %d", len(cfg.Queries))
 	}
-	migrations, output, queries, err := cfg.ResolvePaths()
+	migrations, output, queries, _, err := cfg.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
 	}

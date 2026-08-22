@@ -11,7 +11,7 @@ import (
 	"github.com/yurimoinhos/ameego/internal/parser"
 )
 
-func TestGenerate_Postgres(t *testing.T) {
+func TestGenerate_PerTablePackages(t *testing.T) {
 	migrations := filepath.Join("..", "..", "examples", "basic", "migrations")
 	out := t.TempDir()
 
@@ -32,28 +32,38 @@ func TestGenerate_Postgres(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, name := range []string{"entities_gen.go", "repositories_gen.go", "queries_gen.go", "doc_gen.go"} {
-		path := filepath.Join(out, name)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("missing %s: %v", name, err)
-		}
-		src := string(data)
-		if !strings.Contains(src, "package store") {
-			t.Fatalf("%s: wrong package", name)
-		}
+	userEntity := filepath.Join(out, "tables", "users", "entity_gen.go")
+	data, err := os.ReadFile(userEntity)
+	if err != nil {
+		t.Fatalf("missing per-table entity: %v", err)
 	}
-	entities, _ := os.ReadFile(filepath.Join(out, "entities_gen.go"))
-	if !strings.Contains(string(entities), "type User struct") {
+	src := string(data)
+	if !strings.Contains(src, "package users") {
+		t.Fatalf("expected package users, got: %s", src[:min(80, len(src))])
+	}
+	if !strings.Contains(src, "type User struct") {
 		t.Fatal("expected User struct")
 	}
-	repos, _ := os.ReadFile(filepath.Join(out, "repositories_gen.go"))
-	if !strings.Contains(string(repos), "userSelectAllSQL") {
-		t.Fatal("expected builder-generated SQL constants")
+
+	userRepo := filepath.Join(out, "tables", "users", "repository_gen.go")
+	repoData, err := os.ReadFile(userRepo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(repoData), "selectAllSQL") {
+		t.Fatal("expected precompiled SQL constants in table package")
+	}
+
+	doc, err := os.ReadFile(filepath.Join(out, "doc_gen.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(doc), "package store") {
+		t.Fatal("expected root doc package")
 	}
 }
 
-func TestGenerate_CustomQueries(t *testing.T) {
+func TestGenerate_CustomQueriesPerTable(t *testing.T) {
 	migrations := filepath.Join("..", "..", "examples", "basic", "migrations")
 	queriesFile := filepath.Join("..", "..", "examples", "basic", "queries", "users.sql")
 	out := t.TempDir()
@@ -81,11 +91,18 @@ func TestGenerate_CustomQueries(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	custom, err := os.ReadFile(filepath.Join(out, "custom_queries_gen.go"))
+	custom, err := os.ReadFile(filepath.Join(out, "tables", "users", "custom_queries_gen.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(custom), "FindByEmail") {
-		t.Fatal("expected FindByEmail method")
+		t.Fatal("expected FindByEmail in users package")
 	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

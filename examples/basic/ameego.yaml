@@ -1,0 +1,26 @@
+version: "1"
+
+dialect: postgres
+migrations: ./migrations
+output: ./generated
+package: store
+module: github.com/yurimoinhos/ameego/examples/basic/generated
+
+generate:
+  entities: true
+  repositories: true
+  query_helpers: true
+  routines: true
+
+migrate:
+  schema: public
+  table: ameego_migrations
+
+queries:
+  - entity: User
+    file: ./queries/users.sql
+  - entity: Order
+    file: ./queries/orders.sql
+
+routines:
+  - file: ./routines/users.sql

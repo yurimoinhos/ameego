@@ -17,6 +17,7 @@ import (
 type DB struct {
 	inner   sqlxQueryer
 	dialect dialect.Dialect
+	inTx    bool
 }
 
 type sqlxQueryer interface {
@@ -33,7 +34,7 @@ func Open(driverName, dsn, dialectName string) (*DB, error) {
 	}
 	inner, err := sqlx.Connect(driverName, dsn)
 	if err != nil {
-		return nil, fmt.Errorf("goql: connect: %w", err)
+		return nil, fmt.Errorf("ameego: connect: %w", err)
 	}
 	return &DB{inner: inner, dialect: d}, nil
 }
@@ -49,7 +50,7 @@ func FromSQLX(db *sqlx.DB, dialectName string) (*DB, error) {
 
 // WithTx returns a DB bound to a transaction.
 func (db *DB) WithTx(tx *sqlx.Tx) *DB {
-	return &DB{inner: tx, dialect: db.dialect}
+	return &DB{inner: tx, dialect: db.dialect, inTx: true}
 }
 
 // Begin starts a transaction.
@@ -59,7 +60,7 @@ func (db *DB) BeginTxx(ctx context.Context, opts *sql.TxOptions) (*sqlx.Tx, erro
 	}
 	b, ok := db.inner.(beginTx)
 	if !ok {
-		return nil, fmt.Errorf("goql: underlying driver does not support transactions")
+		return nil, fmt.Errorf("ameego: underlying driver does not support transactions")
 	}
 	return b.BeginTxx(ctx, opts)
 }
@@ -116,7 +117,7 @@ func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.R
 }
 
 // ErrCompositePK is returned when composite PK CRUD is not generated.
-var ErrCompositePK = errors.New("goql: composite primary key not supported for this operation")
+var ErrCompositePK = errors.New("ameego: composite primary key not supported for this operation")
 
 // IsNotFound reports whether err is sql.ErrNoRows.
 func IsNotFound(err error) bool {

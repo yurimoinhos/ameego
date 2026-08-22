@@ -9,9 +9,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const DefaultConfigFile = "goql.yaml"
+const DefaultConfigFile = "ameego.yaml"
 
-// Config is the root goql.yaml configuration.
+// LegacyConfigFile is the deprecated config filename kept for backward compatibility.
+const LegacyConfigFile = "goql.yaml"
+
+// Config is the root ameego.yaml configuration.
 type Config struct {
 	Version    string          `yaml:"version"`
 	Dialect    string          `yaml:"dialect"`
@@ -20,9 +23,22 @@ type Config struct {
 	Package    string          `yaml:"package"`
 	Module     string          `yaml:"module"`
 	Generate   GenerateConfig  `yaml:"generate"`
+	Migrate    MigrateConfig   `yaml:"migrate"`
 	Queries    []QueryFileSpec `yaml:"queries"`
+	Routines   []RoutineSpec   `yaml:"routines"`
 
 	configDir string
+}
+
+// MigrateConfig controls the migration version tracker table.
+type MigrateConfig struct {
+	Schema string `yaml:"schema"` // PostgreSQL/MSSQL schema for ameego_migrations (default: public/dbo)
+	Table  string `yaml:"table"`  // tracker table name (default: ameego_migrations)
+}
+
+// RoutineSpec binds a SQL routines file for codegen.
+type RoutineSpec struct {
+	File string `yaml:"file"`
 }
 
 // GenerateConfig toggles generated artifacts.
@@ -30,6 +46,7 @@ type GenerateConfig struct {
 	Entities     *bool `yaml:"entities"`
 	Repositories *bool `yaml:"repositories"`
 	QueryHelpers *bool `yaml:"query_helpers"`
+	Routines     *bool `yaml:"routines"`
 }
 
 // QueryFileSpec binds a SQL query file to an entity repository.
@@ -44,7 +61,7 @@ type ResolvedQuery struct {
 	File   string
 }
 
-// Load reads and validates a goql.yaml file.
+// Load reads and validates an ameego.yaml file (or legacy goql.yaml).
 func Load(path string) (*Config, error) {
 	if path == "" {
 		path = DefaultConfigFile
@@ -54,6 +71,13 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	raw, err := os.ReadFile(abs)
+	if err != nil && path == DefaultConfigFile {
+		legacy := filepath.Join(filepath.Dir(abs), LegacyConfigFile)
+		raw, err = os.ReadFile(legacy)
+		if err == nil {
+			abs = legacy
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("read config %s: %w", path, err)
 	}
@@ -92,8 +116,13 @@ func (c *Config) validate() error {
 	return nil
 }
 
-// ResolvePaths returns absolute paths for migrations, output, and query files.
-func (c *Config) ResolvePaths() (migrations, output string, queryFiles []ResolvedQuery, err error) {
+// ResolvedRoutine is an absolute routines file path.
+type ResolvedRoutine struct {
+	File string
+}
+
+// ResolvePaths returns absolute paths for migrations, output, query files, and routines.
+func (c *Config) ResolvePaths() (migrations, output string, queryFiles []ResolvedQuery, routineFiles []ResolvedRoutine, err error) {
 	migrations = resolvePath(c.configDir, c.Migrations)
 	output = resolvePath(c.configDir, c.Output)
 	for _, q := range c.Queries {
@@ -102,7 +131,12 @@ func (c *Config) ResolvePaths() (migrations, output string, queryFiles []Resolve
 			File:   resolvePath(c.configDir, q.File),
 		})
 	}
-	return migrations, output, queryFiles, nil
+	for _, r := range c.Routines {
+		routineFiles = append(routineFiles, ResolvedRoutine{
+			File: resolvePath(c.configDir, r.File),
+		})
+	}
+	return migrations, output, queryFiles, routineFiles, nil
 }
 
 func resolvePath(base, p string) string {
@@ -136,7 +170,28 @@ func (c *Config) QueryHelpersEnabled() bool {
 	return *c.Generate.QueryHelpers
 }
 
-// ConfigDir returns the directory containing goql.yaml.
+// RoutinesEnabled reports whether database routine wrappers should be generated.
+func (c *Config) RoutinesEnabled() bool {
+	if c.Generate.Routines == nil {
+		return len(c.Routines) > 0
+	}
+	return *c.Generate.Routines
+}
+
+// MigrationSchema returns the configured migration tracker schema.
+func (c *Config) MigrationSchema() string {
+	return c.Migrate.Schema
+}
+
+// MigrationTable returns the configured migration tracker table name.
+func (c *Config) MigrationTable() string {
+	if c.Migrate.Table == "" {
+		return "ameego_migrations"
+	}
+	return c.Migrate.Table
+}
+
+// ConfigDir returns the directory containing ameego.yaml.
 func (c *Config) ConfigDir() string {
 	if c.configDir == "" {
 		return "."
