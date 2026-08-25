@@ -136,6 +136,18 @@ func RunGenerate(args []string) error {
 		configAbs = config.DefaultConfigFile
 	}
 
+	relations := make([]generator.RelationSpec, len(cfg.Relations))
+	for i, r := range cfg.Relations {
+		relations[i] = generator.RelationSpec{
+			From:       r.From,
+			FromColumn: r.FromColumn,
+			To:         r.To,
+			ToColumn:   r.ToColumn,
+			Join:       r.Join,
+			Field:      r.Field,
+		}
+	}
+
 	return generator.Generate(generator.Config{
 		Package:          cfg.Package,
 		OutputDir:        outAbs,
@@ -149,6 +161,7 @@ func RunGenerate(args []string) error {
 		WithRoutines:     cfg.RoutinesEnabled(),
 		QueryBindings:    bindings,
 		RoutineBindings:  routineBindings,
+		Relations:        relations,
 	})
 }
 
@@ -219,7 +232,7 @@ Flags:
 
 Output layout:
   <out>/doc_gen.go              root package (go:generate)
-  <out>/tables/<table>/         one Go package per table
+  <out>/tables/<table>/         one Go package per table or view
   <out>/functions/<name>/       one Go package per database function
   <out>/procedures/<name>/      one Go package per database procedure
   <out>/triggers/<name>/        one Go package per database trigger

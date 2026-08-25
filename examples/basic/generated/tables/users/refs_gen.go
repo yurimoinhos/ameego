@@ -18,6 +18,24 @@ var Users = userRef{
 
 func (userRef) Table() goql.Table { return Users.table }
 
+// Cols returns every column of users using the default table alias.
+func (r userRef) Cols() []goql.Col {
+	return r.ColsAs(r.table.Alias())
+}
+
+// ColsAs returns every column of users bound to a SQL alias (self-joins, views).
+func (userRef) ColsAs(alias string) []goql.Col {
+	t := goql.TableAs(`users`, alias)
+	return []goql.Col{
+		goql.ColOf(t, `id`),
+		goql.ColOf(t, `email`),
+		goql.ColOf(t, `name`),
+		goql.ColOf(t, `active`),
+		goql.ColOf(t, `created_at`),
+		goql.ColOf(t, `role_id`),
+	}
+}
+
 type userRef struct {
 	Ref   UserCols
 	table goql.Table

@@ -2,12 +2,55 @@
 
 package {{ .Package }}
 
+import (
+{{- if .NeedsSQLImport }}
+	"database/sql"
+{{- end }}
+{{- if .NeedsTimeImport }}
+	"time"
+{{- end }}
+
+	"github.com/yurimoinhos/ameego/pkg/goql"
+{{- range .NestedImports }}
+	{{ .Alias }} "{{ .Path }}"
+{{- end }}
+)
+
 {{ range .NestedEntities }}
 // {{ .StructName }} is a nested result shape for {{ .ParentStruct }} joined with {{ .NestedStruct }}.
+// Scan it from {{ .QueryMethod }} / {{ .QueryMethod }}Join. Joined columns use prefix {{ printf "%q" .NestedPrefix }}.
 type {{ .StructName }} struct {
 {{- range .ParentColumns }}
-	{{ .FieldName }} {{ .GoType }} ` + "`" + `db:"{{ .DBTag }}"` + "`" + `
+	{{ .FieldName }} {{ .GoType }} `db:"{{ .DBTag }}"`
 {{- end }}
-	{{ .NestedField }} {{ .NestedStruct }} ` + "`" + `db:"{{ .NestedPrefix }}."` + "`" + `
+{{- if .InlineNested }}
+	{{ .NestedField }} struct {
+	{{- range .NestedColumns }}
+		{{ .FieldName }} {{ .GoType }} `db:"{{ .DBTag }}"`
+	{{- end }}
+	} `db:"{{ .NestedPrefix }}."`
+{{- else }}
+	{{ .NestedField }} {{ .NestedQualifiedType }} `db:"{{ .NestedPrefix }}."`
+{{- end }}
 }
+
+// {{ .QueryMethod }} selects {{ .ParentStruct }} plus nested {{ .NestedStruct }} using the default join ({{ .JoinGoExpr }}).
+func {{ .QueryMethod }}(db *goql.DB) *goql.Query {
+	return {{ .QueryMethod }}Join(db, {{ .JoinGoExpr }})
+}
+
+// {{ .QueryMethod }}Join selects {{ .ParentStruct }} plus nested {{ .NestedStruct }} with an explicit join kind.
+func {{ .QueryMethod }}Join(db *goql.DB, kind goql.JoinType) *goql.Query {
+	joined := goql.TableAs({{ quote .NestedTableName }}, {{ quote .NestedPrefix }})
+	return goql.NewQuery(db).
+		From({{ .ParentPlural }}.Table()).
+		Select({{ .ParentPlural }}.Cols()...).
+		Join(kind, goql.ColOf(joined, {{ quote .ToColumnSQL }}), {{ .ParentPlural }}.Ref.{{ .FromColField }}).
+		Select(
+{{- range .NestedColumns }}
+			goql.ColOf(joined, {{ quote .SQLName }}),
+{{- end }}
+		)
+}
+
 {{ end }}

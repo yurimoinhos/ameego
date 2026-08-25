@@ -26,6 +26,7 @@ type Config struct {
 	Migrate    MigrateConfig   `yaml:"migrate"`
 	Queries    []QueryFileSpec `yaml:"queries"`
 	Routines   []RoutineSpec   `yaml:"routines"`
+	Relations  []RelationSpec  `yaml:"relations"`
 
 	configDir string
 }
@@ -53,6 +54,17 @@ type GenerateConfig struct {
 type QueryFileSpec struct {
 	Entity string `yaml:"entity"`
 	File   string `yaml:"file"`
+}
+
+// RelationSpec declares a joinable relationship between tables or views.
+// Use this for views (no FKs) or extra joins beyond migration foreign keys.
+type RelationSpec struct {
+	From       string `yaml:"from"`        // table/view name or entity name (User, users)
+	FromColumn string `yaml:"from_column"` // local join column
+	To         string `yaml:"to"`          // referenced table/view or entity name
+	ToColumn   string `yaml:"to_column"`   // referenced join column
+	Join       string `yaml:"join"`        // inner | left | right | full (optional)
+	Field      string `yaml:"field"`       // nested struct field name (optional)
 }
 
 // ResolvedQuery is an absolute query file binding.
@@ -111,6 +123,27 @@ func (c *Config) validate() error {
 		}
 		if strings.TrimSpace(q.File) == "" {
 			return fmt.Errorf("config: queries[%d].file is required", i)
+		}
+	}
+	for i, r := range c.Relations {
+		if strings.TrimSpace(r.From) == "" {
+			return fmt.Errorf("config: relations[%d].from is required", i)
+		}
+		if strings.TrimSpace(r.FromColumn) == "" {
+			return fmt.Errorf("config: relations[%d].from_column is required", i)
+		}
+		if strings.TrimSpace(r.To) == "" {
+			return fmt.Errorf("config: relations[%d].to is required", i)
+		}
+		if strings.TrimSpace(r.ToColumn) == "" {
+			return fmt.Errorf("config: relations[%d].to_column is required", i)
+		}
+		if r.Join != "" {
+			switch strings.ToLower(strings.TrimSpace(r.Join)) {
+			case "inner", "left", "right", "full":
+			default:
+				return fmt.Errorf("config: relations[%d].join must be inner, left, right, or full", i)
+			}
 		}
 	}
 	return nil

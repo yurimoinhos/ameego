@@ -23,18 +23,18 @@ const (
 
 // ParsedRoutine is a database routine extracted from a SQL file.
 type ParsedRoutine struct {
-	Name           string
-	MethodName     string
-	Kind           dialect.RoutineKind
-	ResultKind     RoutineResultKind
-	QualifiedName  string
-	DefinitionSQL  string
-	InvokeSQL      string
-	SourceFile     string
-	Line           int
-	ParamNames     []string
-	ParamTypes     []string
-	ReturnGoType   string
+	Name          string
+	MethodName    string
+	Kind          dialect.RoutineKind
+	ResultKind    RoutineResultKind
+	QualifiedName string
+	DefinitionSQL string
+	InvokeSQL     string
+	SourceFile    string
+	Line          int
+	ParamNames    []string
+	ParamTypes    []string
+	ReturnGoType  string
 }
 
 var (
@@ -42,7 +42,7 @@ var (
 	routineParamRe  = regexp.MustCompile(`(?i)^--\s*params?:\s*(.+)\s*$`)
 	routineReturnRe = regexp.MustCompile(`(?i)^--\s*returns?:\s*(\w+)\s*$`)
 	routineInvokeRe = regexp.MustCompile(`(?i)^--\s*invoke:\s*(.+)\s*$`)
-	routineDBNameRe   = regexp.MustCompile(`(?i)^--\s*db(?:name)?:\s*([\w.]+)\s*$`)
+	routineDBNameRe = regexp.MustCompile(`(?i)^--\s*db(?:name)?:\s*([\w.]+)\s*$`)
 
 	createRoutineRe = regexp.MustCompile(`(?is)CREATE\s+(?:OR\s+REPLACE\s+)?(?:FUNCTION|PROCEDURE|TRIGGER)\s+([` + "`" + `"\[]?[\w.]+[` + "`" + `"\]]?)`)
 )

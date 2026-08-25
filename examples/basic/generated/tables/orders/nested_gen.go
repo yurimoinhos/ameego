@@ -2,16 +2,44 @@
 
 package orders
 
+import (
+	"time"
+
+	users "github.com/yurimoinhos/ameego/examples/basic/generated/tables/users"
+	"github.com/yurimoinhos/ameego/pkg/goql"
+)
 
 // OrderWithUser is a nested result shape for Order joined with User.
+// Scan it from QueryWithUser / QueryWithUserJoin. Joined columns use prefix "users".
 type OrderWithUser struct {
-	Id int64 ` + "`" + `db:"id"` + "`" + `
-	UserId string ` + "`" + `db:"user_id"` + "`" + `
-	Total string ` + "`" + `db:"total"` + "`" + `
-	Status string ` + "`" + `db:"status"` + "`" + `
-	Notes string ` + "`" + `db:"notes"` + "`" + `
-	PlacedAt time.Time ` + "`" + `db:"placed_at"` + "`" + `
-	UpdatedAt string ` + "`" + `db:"updated_at"` + "`" + `
-	User User ` + "`" + `db:"users."` + "`" + `
+	Id        int64      `db:"id"`
+	UserId    string     `db:"user_id"`
+	Total     string     `db:"total"`
+	Status    string     `db:"status"`
+	Notes     string     `db:"notes"`
+	PlacedAt  time.Time  `db:"placed_at"`
+	UpdatedAt string     `db:"updated_at"`
+	User      users.User `db:"users."`
 }
 
+// QueryWithUser selects Order plus nested User using the default join (goql.JoinInner).
+func QueryWithUser(db *goql.DB) *goql.Query {
+	return QueryWithUserJoin(db, goql.JoinInner)
+}
+
+// QueryWithUserJoin selects Order plus nested User with an explicit join kind.
+func QueryWithUserJoin(db *goql.DB, kind goql.JoinType) *goql.Query {
+	joined := goql.TableAs(`users`, `users`)
+	return goql.NewQuery(db).
+		From(Orders.Table()).
+		Select(Orders.Cols()...).
+		Join(kind, goql.ColOf(joined, `id`), Orders.Ref.UserId).
+		Select(
+			goql.ColOf(joined, `id`),
+			goql.ColOf(joined, `email`),
+			goql.ColOf(joined, `name`),
+			goql.ColOf(joined, `active`),
+			goql.ColOf(joined, `created_at`),
+			goql.ColOf(joined, `role_id`),
+		)
+}

@@ -2,15 +2,40 @@
 
 package users
 
+import (
+	"time"
+
+	roles "github.com/yurimoinhos/ameego/examples/basic/generated/tables/roles"
+	"github.com/yurimoinhos/ameego/pkg/goql"
+)
 
 // UserWithRole is a nested result shape for User joined with Role.
+// Scan it from QueryWithRole / QueryWithRoleJoin. Joined columns use prefix "roles".
 type UserWithRole struct {
-	Id string ` + "`" + `db:"id"` + "`" + `
-	Email string ` + "`" + `db:"email"` + "`" + `
-	Name string ` + "`" + `db:"name"` + "`" + `
-	Active bool ` + "`" + `db:"active"` + "`" + `
-	CreatedAt time.Time ` + "`" + `db:"created_at"` + "`" + `
-	RoleId string ` + "`" + `db:"role_id"` + "`" + `
-	Role Role ` + "`" + `db:"roles."` + "`" + `
+	Id        string     `db:"id"`
+	Email     string     `db:"email"`
+	Name      string     `db:"name"`
+	Active    bool       `db:"active"`
+	CreatedAt time.Time  `db:"created_at"`
+	RoleId    string     `db:"role_id"`
+	Role      roles.Role `db:"roles."`
 }
 
+// QueryWithRole selects User plus nested Role using the default join (goql.JoinLeft).
+func QueryWithRole(db *goql.DB) *goql.Query {
+	return QueryWithRoleJoin(db, goql.JoinLeft)
+}
+
+// QueryWithRoleJoin selects User plus nested Role with an explicit join kind.
+func QueryWithRoleJoin(db *goql.DB, kind goql.JoinType) *goql.Query {
+	joined := goql.TableAs(`roles`, `roles`)
+	return goql.NewQuery(db).
+		From(Users.Table()).
+		Select(Users.Cols()...).
+		Join(kind, goql.ColOf(joined, `id`), Users.Ref.RoleId).
+		Select(
+			goql.ColOf(joined, `id`),
+			goql.ColOf(joined, `name`),
+			goql.ColOf(joined, `active`),
+		)
+}

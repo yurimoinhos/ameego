@@ -2,20 +2,30 @@
 
 package {{ .Package }}
 
-{{ if or .NeedsSQLImport .NeedsTimeImport -}}
+{{ $needsSQL := .NeedsSQLImport -}}
+{{ $needsTime := .NeedsTimeImport -}}
+{{ $needsPG := .Entity.NeedsPostgresImport -}}
+{{ $needsMSSQL := .Entity.NeedsMSSQLImport -}}
+{{ if or $needsSQL $needsTime $needsPG $needsMSSQL -}}
 import (
-{{- if .NeedsSQLImport }}
+{{- if $needsSQL }}
 	"database/sql"
 {{- end }}
-{{- if .NeedsTimeImport }}
+{{- if $needsTime }}
 	"time"
+{{- end }}
+{{- if $needsMSSQL }}
+	"github.com/yurimoinhos/ameego/pkg/goql/mssql"
+{{- end }}
+{{- if $needsPG }}
+	"{{ .Entity.PostgresImportPath }}"
 {{- end }}
 )
 {{ end -}}
 
-// {{ .Entity.StructName }} maps to table {{ .Entity.TableName }}.
+// {{ .Entity.StructName }} maps to {{ if .Entity.IsView }}view{{ else }}table{{ end }} {{ .Entity.TableName }}.
 type {{ .Entity.StructName }} struct {
 {{- range .Entity.Columns }}
-	{{ .FieldName }} {{ .GoType }} ` + "`" + `db:"{{ .DBTag }}"` + "`" + `
+	{{ .FieldName }} {{ .GoType }} `db:"{{ .DBTag }}"`
 {{- end }}
 }

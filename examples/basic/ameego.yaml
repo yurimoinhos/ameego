@@ -24,3 +24,12 @@ queries:
 
 routines:
   - file: ./routines/users.sql
+
+# Views have no FKs — declare joins so nested structs and QueryWith* helpers are generated.
+relations:
+  - from: active_users
+    from_column: role_id
+    to: roles
+    to_column: id
+    join: left
+    field: Role

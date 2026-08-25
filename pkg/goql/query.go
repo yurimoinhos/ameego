@@ -25,20 +25,31 @@ const (
 
 // Query is a deferred SQL query — compilation happens at SelectQuery/GetQuery time.
 type Query struct {
-	d         dialect.Dialect
-	selects   []selectItem
-	from      Table
-	fromSub   Subquery
-	fromSet   fromMode
-	joins     []joinItem
-	wheres    []whereItem
-	orders    []orderItem
-	paging    pagingMode
-	limit     int
-	offset    int
-	page      int
-	pageSize  int
-	args      []any
+	d        dialect.Dialect
+	selects  []selectItem
+	from     Table
+	fromSub  Subquery
+	fromSet  fromMode
+	joins    []joinItem
+	wheres   []whereItem
+	orders   []orderItem
+	paging   pagingMode
+	limit    int
+	offset   int
+	page     int
+	pageSize int
+	args     []any
+
+	// MSSQL / T-SQL only — ignored (and rejected) on other dialects.
+	mssqlTop    int
+	mssqlHint   string
+	mssqlOption string
+	orderExprs  []orderExprItem
+}
+
+type orderExprItem struct {
+	expr string
+	desc bool
 }
 
 type selectKind int
@@ -158,12 +169,14 @@ func (q *Query) FromSub(sub Subquery) *Query {
 	return q
 }
 
-// Join adds a typed join. The joined table (not in From) is nested under its alias.
+// Join adds a typed join. The joined table (not already in FROM/JOIN) is nested under its alias.
+// Use ColOf(TableAs(name, alias), col) for self-joins or custom aliases.
+// FULL JOIN is rejected on MySQL/MariaDB (the engine has no FULL OUTER JOIN).
 func (q *Query) Join(kind JoinType, a Col, b Col) *Query {
-	joined := a.Table()
-	if a.table == q.from.name {
-		joined = b.Table()
+	if kind == JoinFull && q.d != nil && q.d.Name() == "mysql" {
+		panic("ameego: FULL JOIN is not supported by MySQL/MariaDB")
 	}
+	joined := q.joinedSide(a, b)
 	q.joins = append(q.joins, joinItem{
 		kind:    kind,
 		table:   joined,
@@ -172,6 +185,39 @@ func (q *Query) Join(kind JoinType, a Col, b Col) *Query {
 		nestKey: joined.Alias(),
 	})
 	return q
+}
+
+func (q *Query) joinedSide(a, b Col) Table {
+	aKnown := q.knowsAlias(a.alias)
+	bKnown := q.knowsAlias(b.alias)
+	switch {
+	case aKnown && !bKnown:
+		return b.Table()
+	case bKnown && !aKnown:
+		return a.Table()
+	case aKnown:
+		return b.Table()
+	default:
+		return a.Table()
+	}
+}
+
+func (q *Query) knowsAlias(alias string) bool {
+	if alias == "" {
+		return false
+	}
+	if q.fromSet == fromTable && q.from.Alias() == alias {
+		return true
+	}
+	if q.fromSet == fromSubquery && q.fromSub.alias == alias {
+		return true
+	}
+	for _, j := range q.joins {
+		if j.table.Alias() == alias {
+			return true
+		}
+	}
+	return false
 }
 
 // Where adds a typed predicate.
@@ -223,6 +269,54 @@ func (q *Query) WhereNotExists(sub *Query) *Query {
 func (q *Query) OrderBy(col Col, desc bool) *Query {
 	q.orders = append(q.orders, orderItem{col: col, desc: desc})
 	return q
+}
+
+// OrderByExpr sorts by a raw SQL expression (e.g. MSSQL VECTOR_DISTANCE(...)).
+// Prefer dialect packages / generated helpers over hand-written expressions.
+func (q *Query) OrderByExpr(expr string, desc bool) *Query {
+	if strings.TrimSpace(expr) == "" {
+		panic("ameego: OrderByExpr requires a non-empty expression")
+	}
+	q.orderExprs = append(q.orderExprs, orderExprItem{expr: expr, desc: desc})
+	return q
+}
+
+// MSSQLTop applies T-SQL SELECT TOP (n). Panics unless the dialect is mssql.
+func (q *Query) MSSQLTop(n int) *Query {
+	q.requireMSSQL("MSSQLTop")
+	if n <= 0 {
+		panic("ameego: MSSQLTop requires n > 0")
+	}
+	q.mssqlTop = n
+	return q
+}
+
+// MSSQLTableHint applies a WITH (hint) on the FROM table (e.g. NOLOCK).
+func (q *Query) MSSQLTableHint(hint string) *Query {
+	q.requireMSSQL("MSSQLTableHint")
+	hint = strings.TrimSpace(hint)
+	if hint == "" {
+		panic("ameego: MSSQLTableHint requires a non-empty hint")
+	}
+	q.mssqlHint = hint
+	return q
+}
+
+// MSSQLOption appends OPTION (...), e.g. RECOMPILE.
+func (q *Query) MSSQLOption(option string) *Query {
+	q.requireMSSQL("MSSQLOption")
+	option = strings.TrimSpace(option)
+	if option == "" {
+		panic("ameego: MSSQLOption requires a non-empty option")
+	}
+	q.mssqlOption = option
+	return q
+}
+
+func (q *Query) requireMSSQL(method string) {
+	if q.d == nil || q.d.Name() != "mssql" {
+		panic("ameego: " + method + " is only available for the mssql dialect")
+	}
 }
 
 // Paginate applies page-based pagination (1-indexed page). Mutually exclusive with Offset and Limit.
@@ -319,7 +413,11 @@ func (q *Query) compileAt(argStart int) (string, []any, int, error) {
 		}
 	}
 
-	parts := []string{"SELECT " + strings.Join(selectParts, ", ")}
+	selectHead := "SELECT "
+	if q.mssqlTop > 0 {
+		selectHead += fmt.Sprintf("TOP (%d) ", q.mssqlTop)
+	}
+	parts := []string{selectHead + strings.Join(selectParts, ", ")}
 
 	switch q.fromSet {
 	case fromSubquery:
@@ -331,12 +429,16 @@ func (q *Query) compileAt(argStart int) (string, []any, int, error) {
 		args = append(args, subArgs...)
 		parts = append(parts, fmt.Sprintf("FROM (%s) AS %s", subSQL, q.d.QuoteIdent(q.fromSub.alias)))
 	default:
-		parts = append(parts, "FROM "+q.d.QuoteIdent(q.from.name)+" AS "+q.d.QuoteIdent(q.from.Alias()))
+		from := "FROM " + q.d.QuoteIdent(q.from.name) + " AS " + q.d.QuoteIdent(q.from.Alias())
+		if q.mssqlHint != "" {
+			from += " WITH (" + q.mssqlHint + ")"
+		}
+		parts = append(parts, from)
 	}
 
 	joined := map[string]struct{}{}
 	for _, j := range q.joins {
-		key := j.table.name
+		key := j.table.Alias()
 		if _, ok := joined[key]; ok {
 			continue
 		}
@@ -391,26 +493,37 @@ func (q *Query) compileAt(argStart int) (string, []any, int, error) {
 		parts = append(parts, "WHERE "+strings.Join(clauses, " AND "))
 	}
 
-	if len(q.orders) > 0 {
-		orderParts := make([]string, len(q.orders))
-		for i, o := range q.orders {
+	if len(q.orders) > 0 || len(q.orderExprs) > 0 {
+		orderParts := make([]string, 0, len(q.orders)+len(q.orderExprs))
+		for _, o := range q.orders {
 			dir := "ASC"
 			if o.desc {
 				dir = "DESC"
 			}
-			orderParts[i] = o.col.qualified(q.d) + " " + dir
+			orderParts = append(orderParts, o.col.qualified(q.d)+" "+dir)
+		}
+		for _, o := range q.orderExprs {
+			dir := "ASC"
+			if o.desc {
+				dir = "DESC"
+			}
+			orderParts = append(orderParts, o.expr+" "+dir)
 		}
 		parts = append(parts, "ORDER BY "+strings.Join(orderParts, ", "))
 	}
 
 	limit, offset := q.resolvedPaging()
 	if limit > 0 {
-		if q.d.Name() == "mssql" && len(q.orders) == 0 {
+		if q.d.Name() == "mssql" && len(q.orders) == 0 && len(q.orderExprs) == 0 {
 			return "", nil, argStart, fmt.Errorf("ameego: MSSQL pagination requires OrderBy")
 		}
 		if clause := dialect.PaginationClause(q.d, limit, offset); clause != "" {
 			parts = append(parts, clause)
 		}
+	}
+
+	if q.mssqlOption != "" {
+		parts = append(parts, "OPTION ("+q.mssqlOption+")")
 	}
 
 	return strings.Join(parts, " "), args, argN + 1, nil

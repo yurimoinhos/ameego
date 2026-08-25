@@ -4,6 +4,12 @@ package {{ .Package }}
 
 import (
 	"context"
+{{- if queryNeedsImport .CustomQueries "sql" }}
+	"database/sql"
+{{- end }}
+{{- if queryNeedsImport .CustomQueries "time" }}
+	"time"
+{{- end }}
 )
 
 {{ range .CustomQueries }}

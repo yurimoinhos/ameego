@@ -18,7 +18,7 @@ import (
 	"github.com/yurimoinhos/ameego/pkg/goql"
 )
 
-//go:embed templates/*.tmpl templates/root/*.tmpl templates/table/*.tmpl templates/routine/*.tmpl
+//go:embed templates/*.tmpl templates/root/*.tmpl templates/table/*.tmpl templates/routine/*.tmpl templates/postgres/*.tmpl
 var templateFS embed.FS
 
 // QueryBinding associates parsed queries with an entity.
@@ -47,6 +47,17 @@ type Config struct {
 	WithRoutines     bool
 	QueryBindings    []QueryBinding
 	RoutineBindings  []RoutineBinding
+	Relations        []RelationSpec
+}
+
+// RelationSpec is a declared table/view relationship (from ameego.yaml).
+type RelationSpec struct {
+	From       string
+	FromColumn string
+	To         string
+	ToColumn   string
+	Join       string
+	Field      string
 }
 
 // EntityView is the template view for a single table entity.
@@ -69,24 +80,58 @@ type EntityView struct {
 	InsertSQL     string
 	UpdateSQL     string
 	DeleteByIDSQL string
+	IsView        bool
+
+	// PostgreSQL DOMAIN usage
+	NeedsPostgresImport bool
+	PostgresImportPath  string
+
+	// MySQL TEMPORARY / ENGINE
+	Temporary          bool
+	Engine             string
+	TableOptions       string
+	HasMySQLFeatures   bool
+	NeedsMySQLImport   bool
+	CreateTemporarySQL string
+	DropTemporarySQL   string
+	AlterEngineSQL     string
+
+	// MSSQL VECTOR / T-SQL
+	NeedsMSSQLImport bool
+	HasVectorColumn  bool
+	VectorColumns    []ColumnView
 }
 
 // NestedEntityView is a generated nested result struct for FK joins.
 type NestedEntityView struct {
-	StructName     string
-	ParentStruct   string
-	NestedStruct   string
-	NestedField    string
-	NestedPrefix   string
-	ParentColumns  []ColumnView
+	StructName          string
+	ParentStruct        string
+	NestedStruct        string
+	NestedQualifiedType string
+	NestedImportPath    string
+	NestedField         string
+	NestedPrefix        string
+	ParentColumns       []ColumnView
+	JoinGoExpr          string
+	FromColField        string
+	ToColumnSQL         string
+	NestedTableName     string
+	ParentPlural        string
+	NestedPlural        string
+	NestedPkgPrefix     string
+	QueryMethod         string
+	NestedColumns       []ColumnView
+	InlineNested        bool
 }
 
 // ColumnView is the template view for a column.
 type ColumnView struct {
-	FieldName string
-	GoType    string
-	DBTag     string
-	SQLName   string
+	FieldName  string
+	GoType     string
+	DBTag      string
+	SQLName    string
+	DomainType string
+	VectorDim  int
 }
 
 // RoutineView is the template view for a database routine.
@@ -107,15 +152,15 @@ type RoutineView struct {
 
 // CustomQueryView is the template view for a custom SQL query method.
 type CustomQueryView struct {
-	Name          string
-	MethodName    string
-	ResultKind    string
-	SQL           string
-	SQLConstName  string
-	RepoName      string
-	StructName    string
-	SourceFile    string
-	Params        []ParamView
+	Name         string
+	MethodName   string
+	ResultKind   string
+	SQL          string
+	SQLConstName string
+	RepoName     string
+	StructName   string
+	SourceFile   string
+	Params       []ParamView
 }
 
 // ParamView is a typed query parameter.
@@ -126,14 +171,24 @@ type ParamView struct {
 	GoType    string
 }
 
+// ImportView is a Go import entry for generated table packages.
+type ImportView struct {
+	Alias string
+	Path  string
+}
+
 // TableView is the template view for a single table package.
 type TableView struct {
-	Package         string
-	Entity          EntityView
-	NestedEntities  []NestedEntityView
-	CustomQueries   []CustomQueryView
-	NeedsSQLImport  bool
-	NeedsTimeImport bool
+	Package              string
+	ModulePath           string
+	Entity               EntityView
+	NestedEntities       []NestedEntityView
+	NestedImports        []ImportView
+	CustomQueries        []CustomQueryView
+	NeedsSQLImport       bool
+	NeedsTimeImport      bool
+	CustomQueryNeedsSQL  bool
+	CustomQueryNeedsTime bool
 }
 
 // RoutinePackageView is the template view for a single routine package.
@@ -144,26 +199,30 @@ type RoutinePackageView struct {
 
 // RootView is the root doc package view.
 type RootView struct {
-	Package           string
-	ConfigPath        string
-	TablesImportPath  string
-	FunctionsPath     string
-	ProceduresPath    string
-	TriggersPath      string
+	Package          string
+	ConfigPath       string
+	TablesImportPath string
+	FunctionsPath    string
+	ProceduresPath   string
+	TriggersPath     string
 }
 
 // PackageView is the aggregate view used while building output.
 type PackageView struct {
-	Package         string
-	ModulePath      string
-	DialectName     string
-	ConfigPath      string
-	Entities        []EntityView
-	NestedEntities  []NestedEntityView
-	CustomQueries   []CustomQueryView
-	Routines        []RoutineView
-	NeedsSQLImport  bool
-	NeedsTimeImport bool
+	Package            string
+	ModulePath         string
+	DialectName        string
+	ConfigPath         string
+	Entities           []EntityView
+	NestedEntities     []NestedEntityView
+	CustomQueries      []CustomQueryView
+	Routines           []RoutineView
+	Domains            []DomainView
+	NeedsSQLImport     bool
+	NeedsTimeImport    bool
+	HasPostgresDomains bool
+	HasMySQLFeatures   bool
+	HasMSSQLFeatures   bool
 }
 
 // Generate writes per-table and per-routine Go packages under OutputDir.
@@ -186,10 +245,25 @@ func Generate(cfg Config) error {
 
 	dialect.ApplyGoTypes(cfg.Dialect, cfg.Schema)
 
+	if err := mergeDeclaredRelations(cfg.Schema, cfg.Relations); err != nil {
+		return err
+	}
+	if cfg.Dialect.Name() == "mysql" {
+		for _, rel := range cfg.Schema.Relations {
+			if strings.EqualFold(rel.JoinKind, "full") {
+				return fmt.Errorf("FULL JOIN is not supported by MySQL/MariaDB (relation %s -> %s)", rel.FromTable, rel.ToTable)
+			}
+		}
+	}
+
 	view, err := buildPackageView(cfg)
 	if err != nil {
 		return err
 	}
+	if err := applyDialectFeatures(cfg, &view); err != nil {
+		return err
+	}
+	resyncEntityTypes(&view)
 	if err := os.MkdirAll(cfg.OutputDir, 0o755); err != nil {
 		return fmt.Errorf("mkdir output: %w", err)
 	}
@@ -217,6 +291,16 @@ func Generate(cfg Config) error {
 		return err
 	}
 
+	if view.HasPostgresDomains && len(view.Domains) > 0 {
+		pgDir := filepath.Join(cfg.OutputDir, "postgres")
+		if err := os.MkdirAll(pgDir, 0o755); err != nil {
+			return fmt.Errorf("mkdir postgres package: %w", err)
+		}
+		if err := writeTemplate("postgres/domains.go.tmpl", filepath.Join(pgDir, "domains_gen.go"), view); err != nil {
+			return err
+		}
+	}
+
 	queriesByEntity := map[string][]CustomQueryView{}
 	for _, q := range view.CustomQueries {
 		queriesByEntity[q.StructName] = append(queriesByEntity[q.StructName], q)
@@ -234,13 +318,20 @@ func Generate(cfg Config) error {
 		}
 
 		needsSQL, needsTime := entityImports(entity)
+		nested := nestedByParent[entity.StructName]
+		nestedSQL, nestedTime, nestedImports := nestedImports(nested)
+		cqSQL, cqTime := customQueryImports(queriesByEntity[entity.StructName])
 		tableView := TableView{
-			Package:         pkg,
-			Entity:          entity,
-			NestedEntities:  nestedByParent[entity.StructName],
-			CustomQueries:   queriesByEntity[entity.StructName],
-			NeedsSQLImport:  needsSQL,
-			NeedsTimeImport: needsTime,
+			Package:              pkg,
+			ModulePath:           cfg.ModulePath,
+			Entity:               entity,
+			NestedEntities:       nested,
+			NestedImports:        nestedImports,
+			CustomQueries:        queriesByEntity[entity.StructName],
+			NeedsSQLImport:       needsSQL || nestedSQL,
+			NeedsTimeImport:      needsTime || nestedTime,
+			CustomQueryNeedsSQL:  cqSQL,
+			CustomQueryNeedsTime: cqTime,
 		}
 
 		if cfg.WithEntities {
@@ -259,6 +350,16 @@ func Generate(cfg Config) error {
 		if cfg.WithRepositories {
 			if err := writeTemplate("table/repository.go.tmpl", filepath.Join(dir, "repository_gen.go"), tableView); err != nil {
 				return err
+			}
+			if entity.HasMySQLFeatures {
+				if err := writeTemplate("table/mysql_features.go.tmpl", filepath.Join(dir, "mysql_features_gen.go"), tableView); err != nil {
+					return err
+				}
+			}
+			if entity.DialectName == "mssql" {
+				if err := writeTemplate("table/mssql_features.go.tmpl", filepath.Join(dir, "mssql_features_gen.go"), tableView); err != nil {
+					return err
+				}
 			}
 		}
 		if cfg.WithQueries && entity.HasSinglePK {
@@ -327,6 +428,35 @@ func entityImports(entity EntityView) (needsSQL, needsTime bool) {
 	return needsSQL, needsTime
 }
 
+// resyncEntityTypes refreshes nested/parent column Go types after dialect feature rewrites.
+func resyncEntityTypes(view *PackageView) {
+	byStruct := map[string]*EntityView{}
+	for i := range view.Entities {
+		byStruct[view.Entities[i].StructName] = &view.Entities[i]
+	}
+	for i := range view.NestedEntities {
+		n := &view.NestedEntities[i]
+		if parent, ok := byStruct[n.ParentStruct]; ok {
+			n.ParentColumns = parent.Columns
+		}
+		if nested, ok := byStruct[n.NestedStruct]; ok {
+			n.NestedColumns = nested.Columns
+		}
+	}
+	for i := range view.Entities {
+		ev := &view.Entities[i]
+		if !ev.HasSinglePK {
+			continue
+		}
+		for _, col := range ev.Columns {
+			if col.SQLName == ev.PKColumn {
+				ev.PKGoType = col.GoType
+				break
+			}
+		}
+	}
+}
+
 func buildPackageView(cfg Config) (PackageView, error) {
 	sqlBuilder := codegen.NewBuilder(cfg.Dialect)
 	entities := make([]EntityView, 0, len(cfg.Schema.Tables))
@@ -337,16 +467,17 @@ func buildPackageView(cfg Config) (PackageView, error) {
 	for _, table := range cfg.Schema.Tables {
 		colNames := make([]string, 0, len(table.Columns))
 		ev := EntityView{
-			StructName:  naming.StructName(table.Name),
-			PluralName:  naming.PluralStructName(table.Name),
-			RefTypeName: naming.VarName(naming.StructName(table.Name)) + "Ref",
+			StructName:   naming.StructName(table.Name),
+			PluralName:   naming.PluralStructName(table.Name),
+			RefTypeName:  naming.VarName(naming.StructName(table.Name)) + "Ref",
 			ColsTypeName: naming.StructName(table.Name) + "Cols",
-			TableName:   table.Name,
-			RepoName:    naming.RepoName(table.Name),
-			PrimaryKey:  table.PrimaryKey,
-			DialectName: cfg.Dialect.Name(),
+			TableName:    table.Name,
+			RepoName:     naming.RepoName(table.Name),
+			PrimaryKey:   table.PrimaryKey,
+			DialectName:  cfg.Dialect.Name(),
+			IsView:       table.IsView(),
 		}
-		if len(table.PrimaryKey) == 1 {
+		if !table.IsView() && len(table.PrimaryKey) == 1 {
 			ev.HasSinglePK = true
 			ev.PKColumn = table.PrimaryKey[0]
 			ev.PKField = naming.FieldName(table.PrimaryKey[0])
@@ -391,7 +522,7 @@ func buildPackageView(cfg Config) (PackageView, error) {
 		return PackageView{}, err
 	}
 
-	nested := buildNestedEntities(cfg.Schema, entityByStruct)
+	nested := buildNestedEntities(cfg.ModulePath, cfg.Schema, entityByStruct)
 
 	return PackageView{
 		Package:         cfg.Package,
@@ -407,43 +538,172 @@ func buildPackageView(cfg Config) (PackageView, error) {
 	}, nil
 }
 
-func buildNestedEntities(s *schema.Schema, entities map[string]*EntityView) []NestedEntityView {
+func buildNestedEntities(modulePath string, s *schema.Schema, entities map[string]*EntityView) []NestedEntityView {
 	tableByName := map[string]schema.Table{}
 	for _, t := range s.Tables {
 		tableByName[t.Name] = t
+		tableByName[strings.ToLower(t.Name)] = t
 	}
 
+	usedStruct := map[string]struct{}{}
+	usedPrefix := map[string]map[string]struct{}{}
+
 	var out []NestedEntityView
-	for _, table := range s.Tables {
-		parent, ok := entities[naming.StructName(table.Name)]
+	for _, rel := range s.Relations {
+		fromTable, ok := tableByName[rel.FromTable]
+		if !ok {
+			fromTable, ok = tableByName[strings.ToLower(rel.FromTable)]
+		}
 		if !ok {
 			continue
 		}
-		for _, col := range table.Columns {
-			if col.RefTable == "" {
-				continue
-			}
-			refTable, ok := tableByName[col.RefTable]
-			if !ok {
-				continue
-			}
-			nestedStruct := naming.StructName(refTable.Name)
-			nestedEntity, ok := entities[nestedStruct]
-			if !ok {
-				continue
-			}
-			out = append(out, NestedEntityView{
-				StructName:    parent.StructName + "With" + nestedStruct,
-				ParentStruct:  parent.StructName,
-				NestedStruct:  nestedStruct,
-				NestedField:   nestedStruct,
-				NestedPrefix:  defaultAlias(refTable.Name),
-				ParentColumns: parent.Columns,
-			})
-			_ = nestedEntity
+		toTable, ok := tableByName[rel.ToTable]
+		if !ok {
+			toTable, ok = tableByName[strings.ToLower(rel.ToTable)]
 		}
+		if !ok {
+			continue
+		}
+		parent, ok := entities[naming.StructName(fromTable.Name)]
+		if !ok {
+			continue
+		}
+		nestedStruct := naming.StructName(toTable.Name)
+		nestedEntity, ok := entities[nestedStruct]
+		if !ok {
+			continue
+		}
+
+		nestedField := rel.NestedField
+		if nestedField == "" {
+			nestedField = nestedStruct
+		}
+		structName := parent.StructName + "With" + nestedField
+		if _, dup := usedStruct[structName]; dup {
+			nestedField = strings.TrimSuffix(naming.FieldName(rel.FromColumn), "Id")
+			if nestedField == "" || nestedField == naming.FieldName(rel.FromColumn) && strings.HasSuffix(naming.FieldName(rel.FromColumn), "Id") {
+				nestedField = naming.FieldName(rel.FromColumn)
+			}
+			if nestedField == "" {
+				nestedField = nestedStruct
+			}
+			structName = parent.StructName + "With" + nestedField
+		}
+		if _, dup := usedStruct[structName]; dup {
+			continue
+		}
+		usedStruct[structName] = struct{}{}
+
+		if usedPrefix[parent.StructName] == nil {
+			usedPrefix[parent.StructName] = map[string]struct{}{}
+		}
+		prefix := defaultAlias(toTable.Name)
+		if strings.EqualFold(fromTable.Name, toTable.Name) {
+			prefix = rel.FromColumn
+			if strings.HasSuffix(strings.ToLower(prefix), "_id") {
+				prefix = prefix[:len(prefix)-3]
+			}
+		}
+		if _, dup := usedPrefix[parent.StructName][prefix]; dup {
+			prefix = rel.FromColumn
+		}
+		usedPrefix[parent.StructName][prefix] = struct{}{}
+
+		parentPkg := naming.PackageName(fromTable.Name)
+		nestedPkg := naming.PackageName(toTable.Name)
+		nestedQualified := nestedStruct
+		nestedImport := ""
+		nestedPkgPrefix := ""
+		inline := false
+		if nestedPkg != parentPkg {
+			nestedQualified = nestedPkg + "." + nestedStruct
+			nestedPkgPrefix = nestedPkg + "."
+			if modulePath != "" {
+				nestedImport = modulePath + "/tables/" + nestedPkg
+			} else {
+				inline = true
+				nestedQualified = nestedStruct
+				nestedPkgPrefix = ""
+			}
+		}
+
+		out = append(out, NestedEntityView{
+			StructName:          structName,
+			ParentStruct:        parent.StructName,
+			NestedStruct:        nestedStruct,
+			NestedQualifiedType: nestedQualified,
+			NestedImportPath:    nestedImport,
+			NestedField:         nestedField,
+			NestedPrefix:        prefix,
+			ParentColumns:       parent.Columns,
+			JoinGoExpr:          joinKindToGo(rel.JoinKind),
+			FromColField:        naming.FieldName(rel.FromColumn),
+			ToColumnSQL:         rel.ToColumn,
+			NestedTableName:     toTable.Name,
+			ParentPlural:        parent.PluralName,
+			NestedPlural:        naming.PluralStructName(toTable.Name),
+			NestedPkgPrefix:     nestedPkgPrefix,
+			QueryMethod:         "QueryWith" + nestedField,
+			NestedColumns:       nestedEntity.Columns,
+			InlineNested:        inline,
+		})
 	}
 	return out
+}
+
+func nestedImports(nested []NestedEntityView) (needsSQL, needsTime bool, imports []ImportView) {
+	seen := map[string]struct{}{}
+	for _, n := range nested {
+		cols := append([]ColumnView{}, n.ParentColumns...)
+		if n.InlineNested {
+			cols = append(cols, n.NestedColumns...)
+		}
+		for _, col := range cols {
+			if strings.HasPrefix(col.GoType, "sql.Null") {
+				needsSQL = true
+			}
+			if col.GoType == "time.Time" || col.GoType == "sql.NullTime" {
+				needsTime = true
+			}
+		}
+		if n.NestedImportPath == "" {
+			continue
+		}
+		if _, dup := seen[n.NestedImportPath]; dup {
+			continue
+		}
+		seen[n.NestedImportPath] = struct{}{}
+		alias := pathBase(n.NestedImportPath)
+		if i := strings.Index(n.NestedQualifiedType, "."); i >= 0 {
+			alias = n.NestedQualifiedType[:i]
+		}
+		imports = append(imports, ImportView{
+			Alias: alias,
+			Path:  n.NestedImportPath,
+		})
+	}
+	return needsSQL, needsTime, imports
+}
+
+func customQueryImports(queries []CustomQueryView) (needsSQL, needsTime bool) {
+	for _, q := range queries {
+		for _, p := range q.Params {
+			if strings.HasPrefix(p.GoType, "sql.Null") {
+				needsSQL = true
+			}
+			if p.GoType == "time.Time" || p.GoType == "sql.NullTime" {
+				needsTime = true
+			}
+		}
+	}
+	return needsSQL, needsTime
+}
+
+func pathBase(p string) string {
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		return p[i+1:]
+	}
+	return p
 }
 
 func defaultAlias(table string) string {
@@ -581,9 +841,30 @@ func writeTemplate(name, outPath string, data any) error {
 		"quote":       func(s string) string { return "`" + strings.ReplaceAll(s, "`", "` + \"`\" + `") + "`" },
 		"lower":       strings.ToLower,
 		"hasPrefix":   strings.HasPrefix,
-		"len":         func(v any) int {
+		"queryNeedsImport": func(qs []CustomQueryView, kind string) bool {
+			for _, q := range qs {
+				for _, p := range q.Params {
+					switch kind {
+					case "time":
+						if p.GoType == "time.Time" || p.GoType == "sql.NullTime" {
+							return true
+						}
+					case "sql":
+						if strings.HasPrefix(p.GoType, "sql.Null") {
+							return true
+						}
+					}
+				}
+			}
+			return false
+		},
+		"len": func(v any) int {
 			switch t := v.(type) {
 			case []ColumnView:
+				return len(t)
+			case []ImportView:
+				return len(t)
+			case []NestedEntityView:
 				return len(t)
 			default:
 				return 0

@@ -99,3 +99,13 @@ func (r *OrderRepository) Delete(ctx context.Context, id int64) error {
 func (r *OrderRepository) WithTx(tx *sqlx.Tx) *OrderRepository {
 	return &OrderRepository{db: r.db.WithTx(tx)}
 }
+
+// QueryWithUser selects Order plus nested User (default goql.JoinInner).
+func (r *OrderRepository) QueryWithUser() *goql.Query {
+	return QueryWithUser(r.db)
+}
+
+// QueryWithUserJoin is QueryWithUser with an explicit join kind.
+func (r *OrderRepository) QueryWithUserJoin(kind goql.JoinType) *goql.Query {
+	return QueryWithUserJoin(r.db, kind)
+}

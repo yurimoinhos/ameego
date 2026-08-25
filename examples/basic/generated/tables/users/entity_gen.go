@@ -5,12 +5,13 @@ package users
 import (
 	"time"
 )
+
 // User maps to table users.
 type User struct {
-	Id string ` + "`" + `db:"id"` + "`" + `
-	Email string ` + "`" + `db:"email"` + "`" + `
-	Name string ` + "`" + `db:"name"` + "`" + `
-	Active bool ` + "`" + `db:"active"` + "`" + `
-	CreatedAt time.Time ` + "`" + `db:"created_at"` + "`" + `
-	RoleId string ` + "`" + `db:"role_id"` + "`" + `
+	Id        string    `db:"id"`
+	Email     string    `db:"email"`
+	Name      string    `db:"name"`
+	Active    bool      `db:"active"`
+	CreatedAt time.Time `db:"created_at"`
+	RoleId    string    `db:"role_id"`
 }

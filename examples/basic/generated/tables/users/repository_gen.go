@@ -97,3 +97,13 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 func (r *UserRepository) WithTx(tx *sqlx.Tx) *UserRepository {
 	return &UserRepository{db: r.db.WithTx(tx)}
 }
+
+// QueryWithRole selects User plus nested Role (default goql.JoinLeft).
+func (r *UserRepository) QueryWithRole() *goql.Query {
+	return QueryWithRole(r.db)
+}
+
+// QueryWithRoleJoin is QueryWithRole with an explicit join kind.
+func (r *UserRepository) QueryWithRoleJoin(kind goql.JoinType) *goql.Query {
+	return QueryWithRoleJoin(r.db, kind)
+}

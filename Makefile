@@ -1,6 +1,6 @@
 .PHONY: test install install-goql build
 
-VERSION ?= 0.3.0
+VERSION ?= 0.5.0
 LDFLAGS := -X github.com/yurimoinhos/ameego/internal/cliapp.Version=$(VERSION)
 
 test:

@@ -65,6 +65,14 @@ queries:
     file: ./queries/users.sql
   - entity: Order
     file: ./queries/orders.sql
+
+# joins extra (obrigatório para views; opcional para sobrescrever FKs)
+relations:
+  - from: active_users
+    from_column: role_id
+    to: roles
+    to_column: id
+    join: left
 ```
 
 ## Geração
@@ -197,20 +205,53 @@ rows, err := db.SelectQuery(ctx, &dest,
 | `WhereExists` / `WhereNotExists` | `EXISTS (SELECT …)` |
 | `TableAs(name, alias)` | refs de coluna contra alias de subquery |
 
-### Dados aninhados
+### Dados aninhados (tabelas e views)
 
-FKs nas migrations geram structs aninhados em `nested_gen.go`:
+FKs nas migrations (inline `REFERENCES`, `FOREIGN KEY` no `CREATE TABLE`, ou `ALTER TABLE … ADD FOREIGN KEY`) geram structs aninhados em `nested_gen.go`. Views não têm FK — declare o join em `ameego.yaml`:
+
+```yaml
+relations:
+  - from: active_users    # tabela, view, ou nome da entidade (ActiveUser)
+    from_column: role_id
+    to: roles
+    to_column: id
+    join: left            # inner | left | right | full (full não existe no MySQL)
+    field: Role           # nome do campo aninhado (opcional)
+```
 
 ```go
 type UserWithRole struct {
-    Id    string `db:"id"`
-    Email string `db:"email"`
+    Id    string     `db:"id"`
+    Email string     `db:"email"`
     // ...
-    Role  Role   `db:"roles."`  // sqlx prefix → roles.id, roles.name
+    Role  roles.Role `db:"roles."`  // sqlx prefix → roles.id, roles.name
 }
 ```
 
-Colunas da tabela joinada recebem alias `roles.id`, `roles.name`, etc., mapeados pelo prefixo `db:"roles."`.
+O helper gerado monta o `SELECT` + `JOIN` com as colunas das structs:
+
+```go
+var rows []users.UserWithRole
+err := usersRepo.SelectQuery(ctx, &rows, usersRepo.QueryWithRole())
+
+// join explícito (inner/left/right; full só postgres/mssql/sqlite)
+err = usersRepo.SelectQuery(ctx, &rows,
+    usersRepo.QueryWithRoleJoin(goql.JoinLeft).
+        Where(users.Users.Ref.Active, goql.Equals, true),
+)
+
+// join manual com as colunas geradas
+err = usersRepo.SelectQuery(ctx, &rows,
+    usersRepo.Query().
+        Select(users.Users.Cols()...).
+        Join(goql.JoinLeft, roles.Roles.Ref.Id, users.Users.Ref.RoleId).
+        Select(roles.Roles.ColsAs("roles")...),
+)
+```
+
+Colunas da relação joinada recebem alias `roles.id`, `roles.name`, etc., mapeados pelo prefixo `db:"roles."`. O quoting (`"…"`, `[…]`, `` `…` ``) segue o dialect (postgres, mssql, mysql, sqlite).
+
+Views geram a mesma DSL (`ActiveUsers.Ref`, `Cols()`, `QueryWithRole`) mas **sem** Insert/Update/Delete.
 
 ### Comparadores e joins
 
@@ -265,31 +306,92 @@ row, err := users.GetByID(ctx, "01JABC...")         // CRUD gerado
 
 | Arquivo | Conteúdo |
 |---|---|
-| `entities_gen.go` | Structs com tags `db` |
-| `repositories_gen.go` | CRUD + SQL Builder + const SQL |
-| `queries_gen.go` | Helpers Exists/ByID |
-| `custom_queries_sql_gen.go` | Const SQL das queries customizadas |
-| `custom_queries_gen.go` | Métodos tipados no repositório |
+| `tables/<name>/entity_gen.go` | Structs com tags `db` |
+| `tables/<name>/repository_gen.go` | CRUD + SQL pré-compilado |
+| `tables/<name>/queries_gen.go` | Helpers Exists/ByID |
+| `tables/<name>/custom_queries_*.go` | Queries tipadas a partir de `.sql` |
+| `postgres/domains_gen.go` | Tipos DOMAIN (só `dialect: postgres`) |
+| `tables/<name>/mysql_features_gen.go` | ENGINE / TEMPORARY (só MySQL) |
+| `tables/<name>/mssql_features_gen.go` | T-SQL TOP / VECTOR (só MSSQL) |
 | `doc_gen.go` | `go:generate` |
+
+## Features nativas por dialecto (sem abstração)
+
+Cada banco gera **APIs concretas** do próprio dialecto — não há interface comum de “features”.
+
+### PostgreSQL — `DOMAIN`
+
+```sql
+CREATE DOMAIN user_email AS VARCHAR(255) CHECK (VALUE ~* '^.+@.+$');
+CREATE TABLE accounts (email user_email NOT NULL);
+```
+
+```go
+// generated/postgres/domains_gen.go
+type UserEmail string
+
+// tables/accounts
+type Account struct {
+    Email postgres.UserEmail `db:"email"`
+}
+```
+
+### MySQL — ENGINE e tabelas temporárias
+
+```sql
+CREATE TABLE products (...) ENGINE=InnoDB;
+CREATE TEMPORARY TABLE cart_items (...) ENGINE=MEMORY;
+```
+
+```go
+products.Engine()                 // "InnoDB"
+products.EnsureEngine(ctx)
+
+cartItems.CreateTemporary(ctx)  // CREATE TEMPORARY TABLE …
+cartItems.DropTemporary(ctx)
+```
+
+### MSSQL — T-SQL e `VECTOR`
+
+```sql
+CREATE TABLE products (
+    id UNIQUEIDENTIFIER PRIMARY KEY,
+    embedding VECTOR(8) NULL
+);
+```
+
+```go
+type Product struct {
+    Embedding *mssql.Vector `db:"embedding"`
+}
+
+products.QueryTop(10) // SELECT TOP (10) …
+products.QueryWithHint("NOLOCK")
+products.OrderByEmbeddingDistance(q, embedding, mssql.DistanceCosine)
+```
+
+Exemplos: `examples/postgres`, `examples/mysql`, `examples/mssql`.
 
 ## Dialectos
 
-- `postgres` — `$1`, `"col"`
-- `mssql` — `@p1`, `[col]`
-- `mysql` / `sqlite` — `?`, identificadores quoted
+- `postgres` — `$1`, `"col"`, DOMAIN types
+- `mssql` — `@p1`, `[col]`, T-SQL TOP / hints / VECTOR
+- `mysql` — `?`, `` `col` ``, ENGINE / TEMPORARY
+- `sqlite` — `?`, `"col"`
 
 ## Arquitetura
 
 ```
-cmd/goql/              CLI ameego (goql.yaml + flags)
+cmd/ameego/            CLI (ameego.yaml + flags)
 internal/
-  config/              Loader goql.yaml
-  parser/              Migrations + query SQL files
-  dialect/             Tipos e placeholders por banco
+  config/              Loader ameego.yaml
+  parser/              Migrations + query SQL + DOMAIN/ENGINE/VECTOR
+  dialect/             Placeholders e MapType por banco
   codegen/             SQL Builder usado no codegen
-  generator/templates/ Go templates
-pkg/goql/              Runtime: DB wrapper + SQL Builder
-examples/basic/        goql.yaml + migrations + queries
+  generator/templates/ Go templates (incl. features nativas)
+pkg/goql/              Runtime DSL
+pkg/goql/postgres|mysql|mssql/  Helpers concretos por banco
+examples/{basic,postgres,mysql,mssql}/
 ```
 
 ## Licença

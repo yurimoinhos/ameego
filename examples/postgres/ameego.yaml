@@ -1,0 +1,12 @@
+version: "1"
+
+dialect: postgres
+migrations: ./migrations
+output: ./generated
+package: store
+module: github.com/yurimoinhos/ameego/examples/postgres/generated
+
+generate:
+  entities: true
+  repositories: true
+  query_helpers: true

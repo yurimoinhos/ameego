@@ -19,6 +19,25 @@ var Orders = orderRef{
 
 func (orderRef) Table() goql.Table { return Orders.table }
 
+// Cols returns every column of orders using the default table alias.
+func (r orderRef) Cols() []goql.Col {
+	return r.ColsAs(r.table.Alias())
+}
+
+// ColsAs returns every column of orders bound to a SQL alias (self-joins, views).
+func (orderRef) ColsAs(alias string) []goql.Col {
+	t := goql.TableAs(`orders`, alias)
+	return []goql.Col{
+		goql.ColOf(t, `id`),
+		goql.ColOf(t, `user_id`),
+		goql.ColOf(t, `total`),
+		goql.ColOf(t, `status`),
+		goql.ColOf(t, `notes`),
+		goql.ColOf(t, `placed_at`),
+		goql.ColOf(t, `updated_at`),
+	}
+}
+
 type orderRef struct {
 	Ref   OrderCols
 	table goql.Table

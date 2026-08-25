@@ -5,13 +5,14 @@ package orders
 import (
 	"time"
 )
+
 // Order maps to table orders.
 type Order struct {
-	Id int64 ` + "`" + `db:"id"` + "`" + `
-	UserId string ` + "`" + `db:"user_id"` + "`" + `
-	Total string ` + "`" + `db:"total"` + "`" + `
-	Status string ` + "`" + `db:"status"` + "`" + `
-	Notes string ` + "`" + `db:"notes"` + "`" + `
-	PlacedAt time.Time ` + "`" + `db:"placed_at"` + "`" + `
-	UpdatedAt string ` + "`" + `db:"updated_at"` + "`" + `
+	Id        int64     `db:"id"`
+	UserId    string    `db:"user_id"`
+	Total     string    `db:"total"`
+	Status    string    `db:"status"`
+	Notes     string    `db:"notes"`
+	PlacedAt  time.Time `db:"placed_at"`
+	UpdatedAt string    `db:"updated_at"`
 }

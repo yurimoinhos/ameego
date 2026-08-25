@@ -15,6 +15,21 @@ var Roles = roleRef{
 
 func (roleRef) Table() goql.Table { return Roles.table }
 
+// Cols returns every column of roles using the default table alias.
+func (r roleRef) Cols() []goql.Col {
+	return r.ColsAs(r.table.Alias())
+}
+
+// ColsAs returns every column of roles bound to a SQL alias (self-joins, views).
+func (roleRef) ColsAs(alias string) []goql.Col {
+	t := goql.TableAs(`roles`, alias)
+	return []goql.Col{
+		goql.ColOf(t, `id`),
+		goql.ColOf(t, `name`),
+		goql.ColOf(t, `active`),
+	}
+}
+
 type roleRef struct {
 	Ref   RoleCols
 	table goql.Table

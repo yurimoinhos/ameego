@@ -162,6 +162,64 @@ func TestFromExclusiveWithFromSub(t *testing.T) {
 	_ = q.FromSub(goql.AsSubquery(inner, "u"))
 }
 
+func TestQueryCompileNestedJoinAllDialects(t *testing.T) {
+	users := goql.TableOf("users")
+	roles := goql.TableOf("roles")
+	cases := []struct {
+		d     dialect.Dialect
+		join  string
+		alias string
+	}{
+		{dialect.Postgres{}, `LEFT JOIN "roles" AS "roles"`, `"roles"."id" AS "roles.id"`},
+		{dialect.MSSQL{}, `LEFT JOIN [roles] AS [roles]`, `[roles].[id] AS [roles.id]`},
+		{dialect.MySQL{}, "LEFT JOIN `roles` AS `roles`", "`roles`.`id` AS `roles.id`"},
+		{dialect.SQLite{}, `LEFT JOIN "roles" AS "roles"`, `"roles"."id" AS "roles.id"`},
+	}
+	for _, tc := range cases {
+		q := goql.NewQueryFromDialect(tc.d).
+			Select(goql.ColOf(users, "id"), goql.ColOf(roles, "id")).
+			From(users).
+			Join(goql.JoinLeft, goql.ColOf(roles, "id"), goql.ColOf(users, "role_id"))
+		sql, _ := q.CompileForTest()
+		if !strings.Contains(sql, tc.join) {
+			t.Fatalf("%s missing join %q in %s", tc.d.Name(), tc.join, sql)
+		}
+		if !strings.Contains(sql, tc.alias) {
+			t.Fatalf("%s missing nested alias %q in %s", tc.d.Name(), tc.alias, sql)
+		}
+	}
+}
+
+func TestMySQLRejectsFullJoin(t *testing.T) {
+	users := goql.TableOf("users")
+	roles := goql.TableOf("roles")
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic for MySQL FULL JOIN")
+		}
+	}()
+	_ = goql.NewQueryFromDialect(dialect.MySQL{}).
+		Select(goql.ColOf(users, "id")).
+		From(users).
+		Join(goql.JoinFull, goql.ColOf(roles, "id"), goql.ColOf(users, "role_id"))
+}
+
+func TestJoinSelfJoinUsesAlias(t *testing.T) {
+	users := goql.TableOf("users")
+	manager := goql.TableAs("users", "manager")
+	q := goql.NewQueryFromDialect(dialect.Postgres{}).
+		Select(goql.ColOf(users, "id"), goql.ColOf(manager, "id")).
+		From(users).
+		Join(goql.JoinLeft, goql.ColOf(manager, "id"), goql.ColOf(users, "manager_id"))
+	sql, _ := q.CompileForTest()
+	if !strings.Contains(sql, `LEFT JOIN "users" AS "manager"`) {
+		t.Fatalf("expected self-join alias: %s", sql)
+	}
+	if !strings.Contains(sql, `"manager"."id" AS "manager.id"`) {
+		t.Fatalf("expected nested manager alias: %s", sql)
+	}
+}
+
 func TestUsersRefPattern(t *testing.T) {
 	users := goql.TableOf("users")
 	id := goql.ColOf(users, "id")

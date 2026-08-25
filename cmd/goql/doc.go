@@ -40,6 +40,15 @@
 //
 // # Release notes
 //
+// ## v0.5.0
+//
+//   - Dialect-native features via codegen (no shared feature interface).
+//   - PostgreSQL: CREATE DOMAIN → generated/postgres domain types + column mapping.
+//   - MySQL: ENGINE=… and CREATE TEMPORARY TABLE → mysql_features_gen.go helpers.
+//   - MSSQL: T-SQL QueryTop / QueryWithHint / OPTION, VECTOR columns → mssql.Vector.
+//   - Runtime helpers in pkg/goql/postgres, pkg/goql/mysql, pkg/goql/mssql.
+//   - Examples: examples/postgres, examples/mysql, examples/mssql.
+//
 // ## v0.3.0
 //
 //   - Paginate(page, size int) for page-based pagination (1-indexed page).
@@ -55,6 +64,8 @@
 //
 //   - Typed column refs (Entity.Ref.Column) and deferred query compilation.
 //   - Nested join mapping with sqlx db struct prefixes.
+//   - Table and view relationships (migration FKs + ameego.yaml relations).
+//   - Generated QueryWith* helpers and Cols()/ColsAs() for typed joins.
 //   - Custom SQL queries from .sql files with dialect placeholder normalization.
 //   - MSSQL, PostgreSQL, MySQL, and SQLite dialect support.
 //

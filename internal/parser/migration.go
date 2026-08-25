@@ -6,14 +6,16 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/yurimoinhos/ameego/internal/schema"
 )
 
 var (
-	createTableRe = regexp.MustCompile(`(?is)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([` + "`" + `"\[]?[\w.]+[` + "`" + `"\]]?)\s*\((.*?)\)\s*(?:;|$)`)
 	alterAddColRe = regexp.MustCompile(`(?is)ALTER\s+TABLE\s+([` + "`" + `"\[]?[\w.]+[` + "`" + `"\]]?)\s+ADD\s+(?:COLUMN\s+)?(\w+)\s+(.+?)(?:;|$)`)
+	alterAddFKRe  = regexp.MustCompile(`(?is)ALTER\s+TABLE\s+([` + "`" + `"\[]?[\w.]+[` + "`" + `"\]]?)\s+ADD\s+(?:CONSTRAINT\s+[` + "`" + `"\[]?[\w]+[` + "`" + `"\]]?\s+)?FOREIGN\s+KEY\s*\(\s*([` + "`" + `"\[]?[\w]+[` + "`" + `"\]]?)\s*\)\s*REFERENCES\s+([` + "`" + `"\[]?[\w.]+[` + "`" + `"\]]?)\s*\(\s*([` + "`" + `"\[]?[\w]+[` + "`" + `"\]]?)\s*\)`)
+	tableFKRe     = regexp.MustCompile(`(?is)(?:CONSTRAINT\s+[` + "`" + `"\[]?[\w]+[` + "`" + `"\]]?\s+)?FOREIGN\s+KEY\s*\(\s*([` + "`" + `"\[]?[\w]+[` + "`" + `"\]]?)\s*\)\s*REFERENCES\s+([` + "`" + `"\[]?[\w.]+[` + "`" + `"\]]?)\s*\(\s*([` + "`" + `"\[]?[\w]+[` + "`" + `"\]]?)\s*\)`)
 	pkInlineRe    = regexp.MustCompile(`(?is)PRIMARY\s+KEY\s*\(([^)]+)\)`)
 	pkColRe       = regexp.MustCompile(`(?is)PRIMARY\s+KEY`)
 	autoIncrRe    = regexp.MustCompile(`(?is)(?:SERIAL|BIGSERIAL|SMALLSERIAL|IDENTITY|AUTO_INCREMENT|AUTOINCREMENT)`)
@@ -35,7 +37,9 @@ func ParseMigrations(opts Options) (*schema.Schema, error) {
 
 	tables := map[string]*schema.Table{}
 	var order []string
+	var domains []schema.Domain
 
+	var files []string
 	err := filepath.WalkDir(opts.MigrationsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -43,29 +47,54 @@ func ParseMigrations(opts Options) (*schema.Schema, error) {
 		if d.IsDir() || !strings.HasSuffix(strings.ToLower(d.Name()), ".sql") {
 			return nil
 		}
-		content, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
-		}
-		applySQL(string(content), tables, &order)
+		files = append(files, path)
 		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("walk migrations: %w", err)
 	}
+	sort.Strings(files)
+	for _, path := range files {
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil, readErr
+		}
+		applySQL(string(content), tables, &order, &domains)
+	}
 
-	s := &schema.Schema{Tables: make([]schema.Table, 0, len(order))}
+	s := &schema.Schema{
+		Tables:  make([]schema.Table, 0, len(order)),
+		Domains: domains,
+	}
 	for _, name := range order {
 		s.Tables = append(s.Tables, *tables[name])
 	}
+	s.Relations = relationsFromFKs(s)
+	annotateDomainColumns(s)
 	return s, nil
 }
 
-func applySQL(sql string, tables map[string]*schema.Table, order *[]string) {
-	for _, m := range createTableRe.FindAllStringSubmatch(sql, -1) {
-		rawName := unquoteIdent(m[1])
-		body := m[2]
-		table := parseTableBody(rawName, body)
+func applySQL(sql string, tables map[string]*schema.Table, order *[]string, domains *[]schema.Domain) {
+	for _, d := range extractDomains(sql) {
+		replaced := false
+		for i := range *domains {
+			if strings.EqualFold((*domains)[i].Name, d.Name) {
+				(*domains)[i] = d
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			*domains = append(*domains, d)
+		}
+	}
+
+	for _, stmt := range extractCreateTables(sql) {
+		rawName := stmt.Name
+		table := parseTableBody(rawName, stmt.Body)
+		table.Temporary = stmt.Temporary
+		table.Options = stmt.Options
+		table.Engine = parseMySQLEngine(stmt.Options)
 		if _, exists := tables[rawName]; !exists {
 			*order = append(*order, rawName)
 		}
@@ -78,9 +107,10 @@ func applySQL(sql string, tables map[string]*schema.Table, order *[]string) {
 		line := strings.TrimSpace(m[3])
 		colType := extractSQLType(line, strings.Fields(line))
 		col := schema.Column{
-			Name:     colName,
-			SQLType:  colType,
-			Nullable: !notNullRe.MatchString(line),
+			Name:      colName,
+			SQLType:   colType,
+			Nullable:  !notNullRe.MatchString(line),
+			VectorDim: parseVectorDim(colType),
 		}
 		if rm := referencesRe.FindStringSubmatch(line); len(rm) == 3 {
 			col.RefTable = unquoteIdent(rm[1])
@@ -88,19 +118,31 @@ func applySQL(sql string, tables map[string]*schema.Table, order *[]string) {
 		}
 		table, ok := tables[rawName]
 		if !ok {
-			table = &schema.Table{Name: rawName}
+			table = &schema.Table{Name: rawName, Kind: schema.KindTable}
 			tables[rawName] = table
 			*order = append(*order, rawName)
 		}
 		table.Columns = append(table.Columns, col)
 	}
+
+	for _, m := range alterAddFKRe.FindAllStringSubmatch(sql, -1) {
+		rawName := unquoteIdent(m[1])
+		table, ok := tables[rawName]
+		if !ok {
+			continue
+		}
+		applyColumnRef(table, unquoteIdent(m[2]), unquoteIdent(m[3]), unquoteIdent(m[4]))
+	}
+
+	parseViews(sql, tables, order)
 }
 
 func parseTableBody(name, body string) *schema.Table {
-	table := &schema.Table{Name: name}
+	table := &schema.Table{Name: name, Kind: schema.KindTable}
 	lines := splitColumnDefs(body)
 
 	var inlinePK []string
+	var tableFKs [][3]string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -114,9 +156,17 @@ func parseTableBody(name, body string) *schema.Table {
 			}
 			continue
 		}
-		if strings.HasPrefix(upper, "CONSTRAINT ") || strings.HasPrefix(upper, "UNIQUE ") ||
-			strings.HasPrefix(upper, "FOREIGN KEY") || strings.HasPrefix(upper, "CHECK ") ||
+		if strings.HasPrefix(upper, "UNIQUE ") || strings.HasPrefix(upper, "CHECK ") ||
 			strings.HasPrefix(upper, "INDEX ") {
+			continue
+		}
+		if strings.HasPrefix(upper, "FOREIGN KEY") || (strings.HasPrefix(upper, "CONSTRAINT ") && strings.Contains(upper, "FOREIGN KEY")) {
+			if m := tableFKRe.FindStringSubmatch(line); len(m) == 4 {
+				tableFKs = append(tableFKs, [3]string{unquoteIdent(m[1]), unquoteIdent(m[2]), unquoteIdent(m[3])})
+			}
+			continue
+		}
+		if strings.HasPrefix(upper, "CONSTRAINT ") {
 			continue
 		}
 
@@ -132,6 +182,7 @@ func parseTableBody(name, body string) *schema.Table {
 			Nullable:   !notNullRe.MatchString(line),
 			IsPrimary:  pkColRe.MatchString(line),
 			IsAutoIncr: autoIncrRe.MatchString(line),
+			VectorDim:  parseVectorDim(colType),
 		}
 		if dm := defaultRe.FindStringSubmatch(line); len(dm) == 2 {
 			col.Default = strings.TrimSpace(dm[1])
@@ -162,7 +213,58 @@ func parseTableBody(name, body string) *schema.Table {
 		}
 	}
 
+	for _, fk := range tableFKs {
+		applyColumnRef(table, fk[0], fk[1], fk[2])
+	}
+
 	return table
+}
+
+func annotateDomainColumns(s *schema.Schema) {
+	if len(s.Domains) == 0 {
+		return
+	}
+	for ti := range s.Tables {
+		for ci := range s.Tables[ti].Columns {
+			col := &s.Tables[ti].Columns[ci]
+			if d, ok := s.DomainNamed(col.SQLType); ok {
+				col.Domain = d.Name
+			}
+		}
+	}
+}
+
+func applyColumnRef(table *schema.Table, colName, refTable, refColumn string) {
+	for i := range table.Columns {
+		if table.Columns[i].Name == colName {
+			table.Columns[i].RefTable = refTable
+			table.Columns[i].RefColumn = refColumn
+			return
+		}
+	}
+}
+
+func relationsFromFKs(s *schema.Schema) []schema.Relation {
+	var out []schema.Relation
+	for _, table := range s.Tables {
+		for _, col := range table.Columns {
+			if col.RefTable == "" || col.RefColumn == "" {
+				continue
+			}
+			joinKind := "inner"
+			if col.Nullable {
+				joinKind = "left"
+			}
+			out = append(out, schema.Relation{
+				FromTable:  table.Name,
+				FromColumn: col.Name,
+				ToTable:    col.RefTable,
+				ToColumn:   col.RefColumn,
+				JoinKind:   joinKind,
+			})
+		}
+	}
+	return out
 }
 
 func splitColumnDefs(body string) []string {

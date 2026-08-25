@@ -4,7 +4,7 @@ package roles
 
 // Role maps to table roles.
 type Role struct {
-	Id string ` + "`" + `db:"id"` + "`" + `
-	Name string ` + "`" + `db:"name"` + "`" + `
-	Active bool ` + "`" + `db:"active"` + "`" + `
+	Id     string `db:"id"`
+	Name   string `db:"name"`
+	Active bool   `db:"active"`
 }

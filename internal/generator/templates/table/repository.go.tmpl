@@ -49,6 +49,7 @@ func (r *{{ .Entity.RepoName }}) GetQuery(ctx context.Context, dest any, q *goql
 	return r.db.GetQuery(ctx, dest, q)
 }
 
+{{- if not .Entity.IsView }}
 {{- if .Entity.HasSinglePK }}
 // GetByID loads a single {{ .Entity.StructName }} by primary key.
 func (r *{{ .Entity.RepoName }}) GetByID(ctx context.Context, id {{ .Entity.PKGoType }}) ({{ .Entity.StructName }}, error) {
@@ -62,6 +63,7 @@ func (r *{{ .Entity.RepoName }}) GetByID(ctx context.Context) ({{ .Entity.Struct
 	return {{ .Entity.StructName }}{}, goql.ErrCompositePK
 }
 {{- end }}
+{{- end }}
 
 // FindAll returns all rows from {{ .Entity.TableName }}.
 func (r *{{ .Entity.RepoName }}) FindAll(ctx context.Context) ([]{{ .Entity.StructName }}, error) {
@@ -70,6 +72,7 @@ func (r *{{ .Entity.RepoName }}) FindAll(ctx context.Context) ([]{{ .Entity.Stru
 	return rows, err
 }
 
+{{- if not .Entity.IsView }}
 {{- if .Entity.HasSinglePK }}
 // Insert persists a new {{ .Entity.StructName }} row.
 func (r *{{ .Entity.RepoName }}) Insert(ctx context.Context, entity *{{ .Entity.StructName }}) error {
@@ -110,8 +113,22 @@ func (r *{{ .Entity.RepoName }}) Delete(ctx context.Context) error {
 	return goql.ErrCompositePK
 }
 {{- end }}
+{{- end }}
 
 // WithTx returns a repository bound to a sqlx transaction.
 func (r *{{ .Entity.RepoName }}) WithTx(tx *sqlx.Tx) *{{ .Entity.RepoName }} {
 	return &{{ .Entity.RepoName }}{db: r.db.WithTx(tx)}
 }
+
+{{- range .NestedEntities }}
+
+// {{ .QueryMethod }} selects {{ .ParentStruct }} plus nested {{ .NestedStruct }} (default {{ .JoinGoExpr }}).
+func (r *{{ $.Entity.RepoName }}) {{ .QueryMethod }}() *goql.Query {
+	return {{ .QueryMethod }}(r.db)
+}
+
+// {{ .QueryMethod }}Join is {{ .QueryMethod }} with an explicit join kind.
+func (r *{{ $.Entity.RepoName }}) {{ .QueryMethod }}Join(kind goql.JoinType) *goql.Query {
+	return {{ .QueryMethod }}Join(r.db, kind)
+}
+{{- end }}
