@@ -5,4 +5,4 @@
 // and routine packages from `github.com/yurimoinhos/ameego/examples/mysql/generated/functions`, `github.com/yurimoinhos/ameego/examples/mysql/generated/procedures`, `github.com/yurimoinhos/ameego/examples/mysql/generated/triggers`.
 package store
 
-//go:generate go run github.com/yurimoinhos/ameego/cmd/ameego generate --config `/Users/yurimoinhos/Projects/Aggitech/aggitech/Goql/examples/mysql/ameego.yaml`
+//go:generate go run github.com/yurimoinhos/ameego/cmd/ameego generate --config `/Users/yurimoinhos/ameego/examples/mysql/ameego.yaml`

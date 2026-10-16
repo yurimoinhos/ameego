@@ -1,0 +1,5 @@
+title: ameego
+description: Compile-time type-safe SQL codegen for Go — multi-dialect, reverse-engineering, no reflection.
+theme: jekyll-theme-cayman
+# baseurl is set automatically by actions/configure-pages for project sites.
+show_downloads: false

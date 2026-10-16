@@ -32,6 +32,12 @@ func Run(args []string) int {
 			return 1
 		}
 		return 0
+	case "introspect", "reverse", "pull":
+		if err := RunIntrospect(args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "ameego: %v\n", err)
+			return 1
+		}
+		return 0
 	case "version", "-v", "--version":
 		fmt.Printf("ameego v%s\n", Version)
 		return 0
@@ -212,6 +218,7 @@ func printUsage() {
 Usage:
   ameego generate [flags]
   ameego migrate up|status [flags]
+  ameego introspect [flags]
 
 Install:
   go install github.com/yurimoinhos/ameego/cmd/ameego@latest
@@ -240,5 +247,11 @@ Output layout:
 Examples:
   ameego generate
   ameego generate --config ./examples/basic/ameego.yaml
-  ameego generate --no-config --migrations ./migrations --dialect mssql --out ./gen`)
+  ameego generate --no-config --migrations ./migrations --dialect mssql --out ./gen
+
+Reverse engineering (read an existing database into ameego):
+  ameego introspect --dsn "$DATABASE_URL"                 # write migrations/000_introspected.sql
+  ameego introspect --dsn "$DATABASE_URL" --generate      # generate Go packages directly
+  ameego introspect --dsn "$DATABASE_URL" --schema myschema --views
+  Pass --driver when the dialect's default driver is not imported.`)
 }

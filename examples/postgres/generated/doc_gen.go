@@ -5,4 +5,4 @@
 // and routine packages from `github.com/yurimoinhos/ameego/examples/postgres/generated/functions`, `github.com/yurimoinhos/ameego/examples/postgres/generated/procedures`, `github.com/yurimoinhos/ameego/examples/postgres/generated/triggers`.
 package store
 
-//go:generate go run github.com/yurimoinhos/ameego/cmd/ameego generate --config `/Users/yurimoinhos/Projects/Aggitech/aggitech/Goql/examples/postgres/ameego.yaml`
+//go:generate go run github.com/yurimoinhos/ameego/cmd/ameego generate --config `/Users/yurimoinhos/ameego/examples/postgres/ameego.yaml`

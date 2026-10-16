@@ -94,6 +94,52 @@ Regenerar via `go generate`:
 go generate ./generated/...
 ```
 
+## Engenharia reversa (`introspect`)
+
+Traga um banco já existente para o ameego — tabelas, colunas, chaves primárias e
+estrangeiras — lendo o catálogo do próprio engine (`information_schema` /
+`pg_catalog` / `sys.*` / `PRAGMA`). Suporta postgres, mysql, mssql e sqlite.
+
+```bash
+# escreve migrations/000_introspected.sql (fonte da verdade continua em migrations)
+ameego introspect --dsn "$DATABASE_URL"
+
+# gera os pacotes Go direto, sem passar por migration
+ameego introspect --dsn "$DATABASE_URL" --generate
+
+# namespace específico e incluindo views como entidades read-only
+ameego introspect --dsn "$DATABASE_URL" --schema myschema --views
+```
+
+Passe `--driver` quando o driver padrão do dialeto não estiver importado no seu
+binário. O fluxo padrão escreve um `.sql` dialeto-fiel que, reaberto por
+`ameego generate`, reproduz exatamente o mesmo schema — então `generate`
+continua sendo o único ponto de geração.
+
+## Builder tipado por schema+dialeto
+
+Para cada tabela, o `generate` emite um `<Entidade>Query` cujos métodos só
+existem porque a coluna (ou o recurso do dialeto) existe no schema de origem.
+Usar uma coluna inexistente, um tipo errado, ou um recurso que o dialeto não tem
+é **erro de compilação** — não panic em runtime.
+
+```go
+import users "example.com/app/generated/tables/users"
+
+// Só colunas reais de users viram métodos; o valor é tipado pela coluna.
+rows, err := users.Query().
+    SelectAll().
+    WhereIdEq(42).          // WhereId<Coluna>Eq(int64) — tipo errado não compila
+    OrderByCreatedAt(true).
+    Limit(10).
+    All(ctx, db)
+```
+
+Métodos específicos de dialeto são gerados condicionalmente — por exemplo
+`Top(n)`, `TableHint("NOLOCK")` e `Option("RECOMPILE")` existem apenas nos
+pacotes gerados para o dialeto **mssql**. Chamá-los contra um schema gerado para
+postgres/mysql/sqlite simplesmente não compila.
+
 ## Queries customizadas (`.sql`)
 
 Cada arquivo referenciado em `goql.yaml` declara queries nomeadas:

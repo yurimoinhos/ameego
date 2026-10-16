@@ -75,6 +75,7 @@ type EntityView struct {
 	PKGoType      string
 	PKColumn      string
 	DialectName   string
+	DialectCtor   string
 	SelectAllSQL  string
 	SelectByIDSQL string
 	InsertSQL     string
@@ -187,6 +188,8 @@ type TableView struct {
 	CustomQueries        []CustomQueryView
 	NeedsSQLImport       bool
 	NeedsTimeImport      bool
+	BuilderNeedsSQL      bool
+	BuilderNeedsTime     bool
 	CustomQueryNeedsSQL  bool
 	CustomQueryNeedsTime bool
 }
@@ -330,6 +333,8 @@ func Generate(cfg Config) error {
 			CustomQueries:        queriesByEntity[entity.StructName],
 			NeedsSQLImport:       needsSQL || nestedSQL,
 			NeedsTimeImport:      needsTime || nestedTime,
+			BuilderNeedsSQL:      needsSQL,
+			BuilderNeedsTime:     needsTime,
 			CustomQueryNeedsSQL:  cqSQL,
 			CustomQueryNeedsTime: cqTime,
 		}
@@ -364,6 +369,11 @@ func Generate(cfg Config) error {
 		}
 		if cfg.WithQueries && entity.HasSinglePK {
 			if err := writeTemplate("table/queries.go.tmpl", filepath.Join(dir, "queries_gen.go"), tableView); err != nil {
+				return err
+			}
+		}
+		if cfg.WithQueries {
+			if err := writeTemplate("table/typed_builder.go.tmpl", filepath.Join(dir, "typed_builder_gen.go"), tableView); err != nil {
 				return err
 			}
 		}
@@ -405,8 +415,24 @@ func Generate(cfg Config) error {
 	return nil
 }
 
-func routineOutput(kind string) (subdir, tmpl string) {
-	switch kind {
+// dialectCtor returns the Go expression that constructs the dialect used by a
+// generated package's typed builder.
+func dialectCtor(name string) string {
+	switch name {
+	case "postgres":
+		return "dialect.Postgres{}"
+	case "mysql":
+		return "dialect.MySQL{}"
+	case "mssql":
+		return "dialect.MSSQL{}"
+	case "sqlite":
+		return "dialect.SQLite{}"
+	default:
+		return "dialect.Postgres{}"
+	}
+}
+
+func routineOutput(kind string) (subdir, tmpl string) {	switch kind {
 	case string(dialect.RoutineProcedure):
 		return "procedures", "routine/procedure.go.tmpl"
 	case string(dialect.RoutineTrigger):
@@ -475,6 +501,7 @@ func buildPackageView(cfg Config) (PackageView, error) {
 			RepoName:     naming.RepoName(table.Name),
 			PrimaryKey:   table.PrimaryKey,
 			DialectName:  cfg.Dialect.Name(),
+			DialectCtor:  dialectCtor(cfg.Dialect.Name()),
 			IsView:       table.IsView(),
 		}
 		if !table.IsView() && len(table.PrimaryKey) == 1 {

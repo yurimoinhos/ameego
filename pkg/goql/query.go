@@ -84,6 +84,8 @@ const (
 	whereNotIn
 	whereExists
 	whereNotExists
+	whereInValues
+	whereNotInValues
 )
 
 type whereItem struct {
@@ -244,6 +246,20 @@ func (q *Query) WhereNotIn(col Col, sub *Query) *Query {
 		panic("ameego: WhereNotIn requires a non-nil subquery")
 	}
 	q.wheres = append(q.wheres, whereItem{kind: whereNotIn, col: col, sub: sub})
+	return q
+}
+
+// WhereInValues adds col IN (v1, v2, ...) for a literal value list.
+// An empty list compiles to a constant-false predicate (col IN (NULL) semantics),
+// so a zero-length filter never silently matches every row.
+func (q *Query) WhereInValues(col Col, values []any) *Query {
+	q.wheres = append(q.wheres, whereItem{kind: whereInValues, col: col, value: values})
+	return q
+}
+
+// WhereNotInValues adds col NOT IN (v1, v2, ...) for a literal value list.
+func (q *Query) WhereNotInValues(col Col, values []any) *Query {
+	q.wheres = append(q.wheres, whereItem{kind: whereNotInValues, col: col, value: values})
 	return q
 }
 
@@ -468,6 +484,28 @@ func (q *Query) compileAt(argStart int) (string, []any, int, error) {
 					op = "NOT IN"
 				}
 				clauses = append(clauses, fmt.Sprintf("%s %s (%s)", w.col.qualified(q.d), op, subSQL))
+			case whereInValues, whereNotInValues:
+				op := "IN"
+				if w.kind == whereNotInValues {
+					op = "NOT IN"
+				}
+				vals, _ := w.value.([]any)
+				if len(vals) == 0 {
+					// Empty list: never match (IN) / always match (NOT IN).
+					if w.kind == whereInValues {
+						clauses = append(clauses, "1 = 0")
+					} else {
+						clauses = append(clauses, "1 = 1")
+					}
+					continue
+				}
+				holders := make([]string, len(vals))
+				for i, v := range vals {
+					argN++
+					holders[i] = q.d.Placeholder(argN)
+					args = append(args, v)
+				}
+				clauses = append(clauses, fmt.Sprintf("%s %s (%s)", w.col.qualified(q.d), op, strings.Join(holders, ", ")))
 			case whereExists, whereNotExists:
 				subSQL, subArgs, next, err := w.sub.compileAt(argN + 1)
 				if err != nil {
