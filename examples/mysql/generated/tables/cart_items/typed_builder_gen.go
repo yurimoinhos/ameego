@@ -116,9 +116,15 @@ func (b *CartItemQuery) WhereIdNotIn(values ...int32) *CartItemQuery {
 	return b
 }
 
-// OrderById orders by cart_items.id.
-func (b *CartItemQuery) OrderById(desc bool) *CartItemQuery {
-	b.q.OrderBy(CartItems.Ref.Id, desc)
+// OrderById orders by cart_items.id ascending.
+func (b *CartItemQuery) OrderById() *CartItemQuery {
+	b.q.OrderBy(CartItems.Ref.Id, false)
+	return b
+}
+
+// OrderByIdDesc orders by cart_items.id descending.
+func (b *CartItemQuery) OrderByIdDesc() *CartItemQuery {
+	b.q.OrderBy(CartItems.Ref.Id, true)
 	return b
 }
 
@@ -198,9 +204,15 @@ func (b *CartItemQuery) WhereSkuNotIn(values ...string) *CartItemQuery {
 	return b
 }
 
-// OrderBySku orders by cart_items.sku.
-func (b *CartItemQuery) OrderBySku(desc bool) *CartItemQuery {
-	b.q.OrderBy(CartItems.Ref.Sku, desc)
+// OrderBySku orders by cart_items.sku ascending.
+func (b *CartItemQuery) OrderBySku() *CartItemQuery {
+	b.q.OrderBy(CartItems.Ref.Sku, false)
+	return b
+}
+
+// OrderBySkuDesc orders by cart_items.sku descending.
+func (b *CartItemQuery) OrderBySkuDesc() *CartItemQuery {
+	b.q.OrderBy(CartItems.Ref.Sku, true)
 	return b
 }
 
@@ -280,9 +292,15 @@ func (b *CartItemQuery) WhereQtyNotIn(values ...int32) *CartItemQuery {
 	return b
 }
 
-// OrderByQty orders by cart_items.qty.
-func (b *CartItemQuery) OrderByQty(desc bool) *CartItemQuery {
-	b.q.OrderBy(CartItems.Ref.Qty, desc)
+// OrderByQty orders by cart_items.qty ascending.
+func (b *CartItemQuery) OrderByQty() *CartItemQuery {
+	b.q.OrderBy(CartItems.Ref.Qty, false)
+	return b
+}
+
+// OrderByQtyDesc orders by cart_items.qty descending.
+func (b *CartItemQuery) OrderByQtyDesc() *CartItemQuery {
+	b.q.OrderBy(CartItems.Ref.Qty, true)
 	return b
 }
 

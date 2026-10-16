@@ -118,9 +118,15 @@ func (b *ProductQuery) WhereIdNotIn(values ...string) *ProductQuery {
 	return b
 }
 
-// OrderById orders by products.id.
-func (b *ProductQuery) OrderById(desc bool) *ProductQuery {
-	b.q.OrderBy(Products.Ref.Id, desc)
+// OrderById orders by products.id ascending.
+func (b *ProductQuery) OrderById() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Id, false)
+	return b
+}
+
+// OrderByIdDesc orders by products.id descending.
+func (b *ProductQuery) OrderByIdDesc() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Id, true)
 	return b
 }
 
@@ -200,9 +206,15 @@ func (b *ProductQuery) WhereSkuNotIn(values ...string) *ProductQuery {
 	return b
 }
 
-// OrderBySku orders by products.sku.
-func (b *ProductQuery) OrderBySku(desc bool) *ProductQuery {
-	b.q.OrderBy(Products.Ref.Sku, desc)
+// OrderBySku orders by products.sku ascending.
+func (b *ProductQuery) OrderBySku() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Sku, false)
+	return b
+}
+
+// OrderBySkuDesc orders by products.sku descending.
+func (b *ProductQuery) OrderBySkuDesc() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Sku, true)
 	return b
 }
 
@@ -282,9 +294,15 @@ func (b *ProductQuery) WherePriceNotIn(values ...string) *ProductQuery {
 	return b
 }
 
-// OrderByPrice orders by products.price.
-func (b *ProductQuery) OrderByPrice(desc bool) *ProductQuery {
-	b.q.OrderBy(Products.Ref.Price, desc)
+// OrderByPrice orders by products.price ascending.
+func (b *ProductQuery) OrderByPrice() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Price, false)
+	return b
+}
+
+// OrderByPriceDesc orders by products.price descending.
+func (b *ProductQuery) OrderByPriceDesc() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Price, true)
 	return b
 }
 
@@ -364,9 +382,15 @@ func (b *ProductQuery) WhereStockNotIn(values ...int32) *ProductQuery {
 	return b
 }
 
-// OrderByStock orders by products.stock.
-func (b *ProductQuery) OrderByStock(desc bool) *ProductQuery {
-	b.q.OrderBy(Products.Ref.Stock, desc)
+// OrderByStock orders by products.stock ascending.
+func (b *ProductQuery) OrderByStock() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Stock, false)
+	return b
+}
+
+// OrderByStockDesc orders by products.stock descending.
+func (b *ProductQuery) OrderByStockDesc() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Stock, true)
 	return b
 }
 
@@ -446,9 +470,15 @@ func (b *ProductQuery) WhereIsActiveNotIn(values ...bool) *ProductQuery {
 	return b
 }
 
-// OrderByIsActive orders by products.is_active.
-func (b *ProductQuery) OrderByIsActive(desc bool) *ProductQuery {
-	b.q.OrderBy(Products.Ref.IsActive, desc)
+// OrderByIsActive orders by products.is_active ascending.
+func (b *ProductQuery) OrderByIsActive() *ProductQuery {
+	b.q.OrderBy(Products.Ref.IsActive, false)
+	return b
+}
+
+// OrderByIsActiveDesc orders by products.is_active descending.
+func (b *ProductQuery) OrderByIsActiveDesc() *ProductQuery {
+	b.q.OrderBy(Products.Ref.IsActive, true)
 	return b
 }
 
@@ -528,9 +558,15 @@ func (b *ProductQuery) WhereEmbeddingNotIn(values ...*mssql.Vector) *ProductQuer
 	return b
 }
 
-// OrderByEmbedding orders by products.embedding.
-func (b *ProductQuery) OrderByEmbedding(desc bool) *ProductQuery {
-	b.q.OrderBy(Products.Ref.Embedding, desc)
+// OrderByEmbedding orders by products.embedding ascending.
+func (b *ProductQuery) OrderByEmbedding() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Embedding, false)
+	return b
+}
+
+// OrderByEmbeddingDesc orders by products.embedding descending.
+func (b *ProductQuery) OrderByEmbeddingDesc() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Embedding, true)
 	return b
 }
 
@@ -610,9 +646,15 @@ func (b *ProductQuery) WhereCreatedAtNotIn(values ...time.Time) *ProductQuery {
 	return b
 }
 
-// OrderByCreatedAt orders by products.created_at.
-func (b *ProductQuery) OrderByCreatedAt(desc bool) *ProductQuery {
-	b.q.OrderBy(Products.Ref.CreatedAt, desc)
+// OrderByCreatedAt orders by products.created_at ascending.
+func (b *ProductQuery) OrderByCreatedAt() *ProductQuery {
+	b.q.OrderBy(Products.Ref.CreatedAt, false)
+	return b
+}
+
+// OrderByCreatedAtDesc orders by products.created_at descending.
+func (b *ProductQuery) OrderByCreatedAtDesc() *ProductQuery {
+	b.q.OrderBy(Products.Ref.CreatedAt, true)
 	return b
 }
 

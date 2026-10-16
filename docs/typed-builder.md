@@ -56,7 +56,8 @@ is a compile error:
 | `WhereCreatedAtNotIn(v...)`    | `created_at NOT IN (?, ?, …)`    |
 | `WhereCreatedAtIsNull()`       | `created_at IS NULL`             |
 | `WhereCreatedAtIsNotNull()`    | `created_at IS NOT NULL`         |
-| `OrderByCreatedAt(desc bool)`  | `ORDER BY created_at [DESC]`     |
+| `OrderByCreatedAt()`           | `ORDER BY created_at`            |
+| `OrderByCreatedAtDesc()`       | `ORDER BY created_at DESC`       |
 
 ```go
 rows, err := users.Query().
@@ -64,7 +65,7 @@ rows, err := users.Query().
     WhereAgeGte(18).
     WhereNameLike("A%").
     WhereStatusIn("active", "trial").   // variadic, each typed as the column
-    OrderByCreatedAt(true).
+    OrderByCreatedAtDesc().
     Limit(20).
     All(ctx, db)
 ```

@@ -117,9 +117,15 @@ func (b *OrderQuery) WhereIdNotIn(values ...int64) *OrderQuery {
 	return b
 }
 
-// OrderById orders by orders.id.
-func (b *OrderQuery) OrderById(desc bool) *OrderQuery {
-	b.q.OrderBy(Orders.Ref.Id, desc)
+// OrderById orders by orders.id ascending.
+func (b *OrderQuery) OrderById() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.Id, false)
+	return b
+}
+
+// OrderByIdDesc orders by orders.id descending.
+func (b *OrderQuery) OrderByIdDesc() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.Id, true)
 	return b
 }
 
@@ -199,9 +205,15 @@ func (b *OrderQuery) WhereUserIdNotIn(values ...string) *OrderQuery {
 	return b
 }
 
-// OrderByUserId orders by orders.user_id.
-func (b *OrderQuery) OrderByUserId(desc bool) *OrderQuery {
-	b.q.OrderBy(Orders.Ref.UserId, desc)
+// OrderByUserId orders by orders.user_id ascending.
+func (b *OrderQuery) OrderByUserId() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.UserId, false)
+	return b
+}
+
+// OrderByUserIdDesc orders by orders.user_id descending.
+func (b *OrderQuery) OrderByUserIdDesc() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.UserId, true)
 	return b
 }
 
@@ -281,9 +293,15 @@ func (b *OrderQuery) WhereTotalNotIn(values ...string) *OrderQuery {
 	return b
 }
 
-// OrderByTotal orders by orders.total.
-func (b *OrderQuery) OrderByTotal(desc bool) *OrderQuery {
-	b.q.OrderBy(Orders.Ref.Total, desc)
+// OrderByTotal orders by orders.total ascending.
+func (b *OrderQuery) OrderByTotal() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.Total, false)
+	return b
+}
+
+// OrderByTotalDesc orders by orders.total descending.
+func (b *OrderQuery) OrderByTotalDesc() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.Total, true)
 	return b
 }
 
@@ -363,9 +381,15 @@ func (b *OrderQuery) WhereStatusNotIn(values ...string) *OrderQuery {
 	return b
 }
 
-// OrderByStatus orders by orders.status.
-func (b *OrderQuery) OrderByStatus(desc bool) *OrderQuery {
-	b.q.OrderBy(Orders.Ref.Status, desc)
+// OrderByStatus orders by orders.status ascending.
+func (b *OrderQuery) OrderByStatus() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.Status, false)
+	return b
+}
+
+// OrderByStatusDesc orders by orders.status descending.
+func (b *OrderQuery) OrderByStatusDesc() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.Status, true)
 	return b
 }
 
@@ -445,9 +469,15 @@ func (b *OrderQuery) WhereNotesNotIn(values ...string) *OrderQuery {
 	return b
 }
 
-// OrderByNotes orders by orders.notes.
-func (b *OrderQuery) OrderByNotes(desc bool) *OrderQuery {
-	b.q.OrderBy(Orders.Ref.Notes, desc)
+// OrderByNotes orders by orders.notes ascending.
+func (b *OrderQuery) OrderByNotes() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.Notes, false)
+	return b
+}
+
+// OrderByNotesDesc orders by orders.notes descending.
+func (b *OrderQuery) OrderByNotesDesc() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.Notes, true)
 	return b
 }
 
@@ -527,9 +557,15 @@ func (b *OrderQuery) WherePlacedAtNotIn(values ...time.Time) *OrderQuery {
 	return b
 }
 
-// OrderByPlacedAt orders by orders.placed_at.
-func (b *OrderQuery) OrderByPlacedAt(desc bool) *OrderQuery {
-	b.q.OrderBy(Orders.Ref.PlacedAt, desc)
+// OrderByPlacedAt orders by orders.placed_at ascending.
+func (b *OrderQuery) OrderByPlacedAt() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.PlacedAt, false)
+	return b
+}
+
+// OrderByPlacedAtDesc orders by orders.placed_at descending.
+func (b *OrderQuery) OrderByPlacedAtDesc() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.PlacedAt, true)
 	return b
 }
 
@@ -609,9 +645,15 @@ func (b *OrderQuery) WhereUpdatedAtNotIn(values ...string) *OrderQuery {
 	return b
 }
 
-// OrderByUpdatedAt orders by orders.updated_at.
-func (b *OrderQuery) OrderByUpdatedAt(desc bool) *OrderQuery {
-	b.q.OrderBy(Orders.Ref.UpdatedAt, desc)
+// OrderByUpdatedAt orders by orders.updated_at ascending.
+func (b *OrderQuery) OrderByUpdatedAt() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.UpdatedAt, false)
+	return b
+}
+
+// OrderByUpdatedAtDesc orders by orders.updated_at descending.
+func (b *OrderQuery) OrderByUpdatedAtDesc() *OrderQuery {
+	b.q.OrderBy(Orders.Ref.UpdatedAt, true)
 	return b
 }
 

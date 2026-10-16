@@ -118,9 +118,15 @@ func (b *AccountQuery) WhereIdNotIn(values ...int64) *AccountQuery {
 	return b
 }
 
-// OrderById orders by accounts.id.
-func (b *AccountQuery) OrderById(desc bool) *AccountQuery {
-	b.q.OrderBy(Accounts.Ref.Id, desc)
+// OrderById orders by accounts.id ascending.
+func (b *AccountQuery) OrderById() *AccountQuery {
+	b.q.OrderBy(Accounts.Ref.Id, false)
+	return b
+}
+
+// OrderByIdDesc orders by accounts.id descending.
+func (b *AccountQuery) OrderByIdDesc() *AccountQuery {
+	b.q.OrderBy(Accounts.Ref.Id, true)
 	return b
 }
 
@@ -200,9 +206,15 @@ func (b *AccountQuery) WhereEmailNotIn(values ...postgres.UserEmail) *AccountQue
 	return b
 }
 
-// OrderByEmail orders by accounts.email.
-func (b *AccountQuery) OrderByEmail(desc bool) *AccountQuery {
-	b.q.OrderBy(Accounts.Ref.Email, desc)
+// OrderByEmail orders by accounts.email ascending.
+func (b *AccountQuery) OrderByEmail() *AccountQuery {
+	b.q.OrderBy(Accounts.Ref.Email, false)
+	return b
+}
+
+// OrderByEmailDesc orders by accounts.email descending.
+func (b *AccountQuery) OrderByEmailDesc() *AccountQuery {
+	b.q.OrderBy(Accounts.Ref.Email, true)
 	return b
 }
 
@@ -282,9 +294,15 @@ func (b *AccountQuery) WhereScoreNotIn(values ...postgres.PositiveInt) *AccountQ
 	return b
 }
 
-// OrderByScore orders by accounts.score.
-func (b *AccountQuery) OrderByScore(desc bool) *AccountQuery {
-	b.q.OrderBy(Accounts.Ref.Score, desc)
+// OrderByScore orders by accounts.score ascending.
+func (b *AccountQuery) OrderByScore() *AccountQuery {
+	b.q.OrderBy(Accounts.Ref.Score, false)
+	return b
+}
+
+// OrderByScoreDesc orders by accounts.score descending.
+func (b *AccountQuery) OrderByScoreDesc() *AccountQuery {
+	b.q.OrderBy(Accounts.Ref.Score, true)
 	return b
 }
 
@@ -364,9 +382,15 @@ func (b *AccountQuery) WhereCreatedAtNotIn(values ...time.Time) *AccountQuery {
 	return b
 }
 
-// OrderByCreatedAt orders by accounts.created_at.
-func (b *AccountQuery) OrderByCreatedAt(desc bool) *AccountQuery {
-	b.q.OrderBy(Accounts.Ref.CreatedAt, desc)
+// OrderByCreatedAt orders by accounts.created_at ascending.
+func (b *AccountQuery) OrderByCreatedAt() *AccountQuery {
+	b.q.OrderBy(Accounts.Ref.CreatedAt, false)
+	return b
+}
+
+// OrderByCreatedAtDesc orders by accounts.created_at descending.
+func (b *AccountQuery) OrderByCreatedAtDesc() *AccountQuery {
+	b.q.OrderBy(Accounts.Ref.CreatedAt, true)
 	return b
 }
 

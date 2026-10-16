@@ -130,9 +130,15 @@ func (b *{{ $.Entity.StructName }}Query) Where{{ .FieldName }}NotIn(values ...{{
 	return b
 }
 
-// OrderBy{{ .FieldName }} orders by {{ $.Entity.TableName }}.{{ .SQLName }}.
-func (b *{{ $.Entity.StructName }}Query) OrderBy{{ .FieldName }}(desc bool) *{{ $.Entity.StructName }}Query {
-	b.q.OrderBy({{ $.Entity.PluralName }}.Ref.{{ .FieldName }}, desc)
+// OrderBy{{ .FieldName }} orders by {{ $.Entity.TableName }}.{{ .SQLName }} ascending.
+func (b *{{ $.Entity.StructName }}Query) OrderBy{{ .FieldName }}() *{{ $.Entity.StructName }}Query {
+	b.q.OrderBy({{ $.Entity.PluralName }}.Ref.{{ .FieldName }}, false)
+	return b
+}
+
+// OrderBy{{ .FieldName }}Desc orders by {{ $.Entity.TableName }}.{{ .SQLName }} descending.
+func (b *{{ $.Entity.StructName }}Query) OrderBy{{ .FieldName }}Desc() *{{ $.Entity.StructName }}Query {
+	b.q.OrderBy({{ $.Entity.PluralName }}.Ref.{{ .FieldName }}, true)
 	return b
 }
 {{- end }}

@@ -117,9 +117,15 @@ func (b *ActiveUserQuery) WhereIdNotIn(values ...string) *ActiveUserQuery {
 	return b
 }
 
-// OrderById orders by active_users.id.
-func (b *ActiveUserQuery) OrderById(desc bool) *ActiveUserQuery {
-	b.q.OrderBy(ActiveUsers.Ref.Id, desc)
+// OrderById orders by active_users.id ascending.
+func (b *ActiveUserQuery) OrderById() *ActiveUserQuery {
+	b.q.OrderBy(ActiveUsers.Ref.Id, false)
+	return b
+}
+
+// OrderByIdDesc orders by active_users.id descending.
+func (b *ActiveUserQuery) OrderByIdDesc() *ActiveUserQuery {
+	b.q.OrderBy(ActiveUsers.Ref.Id, true)
 	return b
 }
 
@@ -199,9 +205,15 @@ func (b *ActiveUserQuery) WhereEmailNotIn(values ...string) *ActiveUserQuery {
 	return b
 }
 
-// OrderByEmail orders by active_users.email.
-func (b *ActiveUserQuery) OrderByEmail(desc bool) *ActiveUserQuery {
-	b.q.OrderBy(ActiveUsers.Ref.Email, desc)
+// OrderByEmail orders by active_users.email ascending.
+func (b *ActiveUserQuery) OrderByEmail() *ActiveUserQuery {
+	b.q.OrderBy(ActiveUsers.Ref.Email, false)
+	return b
+}
+
+// OrderByEmailDesc orders by active_users.email descending.
+func (b *ActiveUserQuery) OrderByEmailDesc() *ActiveUserQuery {
+	b.q.OrderBy(ActiveUsers.Ref.Email, true)
 	return b
 }
 
@@ -281,9 +293,15 @@ func (b *ActiveUserQuery) WhereNameNotIn(values ...string) *ActiveUserQuery {
 	return b
 }
 
-// OrderByName orders by active_users.name.
-func (b *ActiveUserQuery) OrderByName(desc bool) *ActiveUserQuery {
-	b.q.OrderBy(ActiveUsers.Ref.Name, desc)
+// OrderByName orders by active_users.name ascending.
+func (b *ActiveUserQuery) OrderByName() *ActiveUserQuery {
+	b.q.OrderBy(ActiveUsers.Ref.Name, false)
+	return b
+}
+
+// OrderByNameDesc orders by active_users.name descending.
+func (b *ActiveUserQuery) OrderByNameDesc() *ActiveUserQuery {
+	b.q.OrderBy(ActiveUsers.Ref.Name, true)
 	return b
 }
 
@@ -363,9 +381,15 @@ func (b *ActiveUserQuery) WhereRoleIdNotIn(values ...string) *ActiveUserQuery {
 	return b
 }
 
-// OrderByRoleId orders by active_users.role_id.
-func (b *ActiveUserQuery) OrderByRoleId(desc bool) *ActiveUserQuery {
-	b.q.OrderBy(ActiveUsers.Ref.RoleId, desc)
+// OrderByRoleId orders by active_users.role_id ascending.
+func (b *ActiveUserQuery) OrderByRoleId() *ActiveUserQuery {
+	b.q.OrderBy(ActiveUsers.Ref.RoleId, false)
+	return b
+}
+
+// OrderByRoleIdDesc orders by active_users.role_id descending.
+func (b *ActiveUserQuery) OrderByRoleIdDesc() *ActiveUserQuery {
+	b.q.OrderBy(ActiveUsers.Ref.RoleId, true)
 	return b
 }
 
@@ -445,9 +469,15 @@ func (b *ActiveUserQuery) WhereCreatedAtNotIn(values ...time.Time) *ActiveUserQu
 	return b
 }
 
-// OrderByCreatedAt orders by active_users.created_at.
-func (b *ActiveUserQuery) OrderByCreatedAt(desc bool) *ActiveUserQuery {
-	b.q.OrderBy(ActiveUsers.Ref.CreatedAt, desc)
+// OrderByCreatedAt orders by active_users.created_at ascending.
+func (b *ActiveUserQuery) OrderByCreatedAt() *ActiveUserQuery {
+	b.q.OrderBy(ActiveUsers.Ref.CreatedAt, false)
+	return b
+}
+
+// OrderByCreatedAtDesc orders by active_users.created_at descending.
+func (b *ActiveUserQuery) OrderByCreatedAtDesc() *ActiveUserQuery {
+	b.q.OrderBy(ActiveUsers.Ref.CreatedAt, true)
 	return b
 }
 

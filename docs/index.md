@@ -49,7 +49,7 @@ rows, err := users.Query().
     WhereAgeGte(18).           // typed by the column's Go type
     WhereNameLike("A%").
     WhereStatusIn("active", "trial").
-    OrderByCreatedAt(true).
+    OrderByCreatedAtDesc().
     Limit(20).
     All(ctx, db)
 ```

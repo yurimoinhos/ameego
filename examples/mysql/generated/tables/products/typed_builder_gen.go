@@ -116,9 +116,15 @@ func (b *ProductQuery) WhereIdNotIn(values ...int32) *ProductQuery {
 	return b
 }
 
-// OrderById orders by products.id.
-func (b *ProductQuery) OrderById(desc bool) *ProductQuery {
-	b.q.OrderBy(Products.Ref.Id, desc)
+// OrderById orders by products.id ascending.
+func (b *ProductQuery) OrderById() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Id, false)
+	return b
+}
+
+// OrderByIdDesc orders by products.id descending.
+func (b *ProductQuery) OrderByIdDesc() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Id, true)
 	return b
 }
 
@@ -198,9 +204,15 @@ func (b *ProductQuery) WhereSkuNotIn(values ...string) *ProductQuery {
 	return b
 }
 
-// OrderBySku orders by products.sku.
-func (b *ProductQuery) OrderBySku(desc bool) *ProductQuery {
-	b.q.OrderBy(Products.Ref.Sku, desc)
+// OrderBySku orders by products.sku ascending.
+func (b *ProductQuery) OrderBySku() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Sku, false)
+	return b
+}
+
+// OrderBySkuDesc orders by products.sku descending.
+func (b *ProductQuery) OrderBySkuDesc() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Sku, true)
 	return b
 }
 
@@ -280,9 +292,15 @@ func (b *ProductQuery) WherePriceNotIn(values ...string) *ProductQuery {
 	return b
 }
 
-// OrderByPrice orders by products.price.
-func (b *ProductQuery) OrderByPrice(desc bool) *ProductQuery {
-	b.q.OrderBy(Products.Ref.Price, desc)
+// OrderByPrice orders by products.price ascending.
+func (b *ProductQuery) OrderByPrice() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Price, false)
+	return b
+}
+
+// OrderByPriceDesc orders by products.price descending.
+func (b *ProductQuery) OrderByPriceDesc() *ProductQuery {
+	b.q.OrderBy(Products.Ref.Price, true)
 	return b
 }
 

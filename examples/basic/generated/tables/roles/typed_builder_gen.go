@@ -116,9 +116,15 @@ func (b *RoleQuery) WhereIdNotIn(values ...string) *RoleQuery {
 	return b
 }
 
-// OrderById orders by roles.id.
-func (b *RoleQuery) OrderById(desc bool) *RoleQuery {
-	b.q.OrderBy(Roles.Ref.Id, desc)
+// OrderById orders by roles.id ascending.
+func (b *RoleQuery) OrderById() *RoleQuery {
+	b.q.OrderBy(Roles.Ref.Id, false)
+	return b
+}
+
+// OrderByIdDesc orders by roles.id descending.
+func (b *RoleQuery) OrderByIdDesc() *RoleQuery {
+	b.q.OrderBy(Roles.Ref.Id, true)
 	return b
 }
 
@@ -198,9 +204,15 @@ func (b *RoleQuery) WhereNameNotIn(values ...string) *RoleQuery {
 	return b
 }
 
-// OrderByName orders by roles.name.
-func (b *RoleQuery) OrderByName(desc bool) *RoleQuery {
-	b.q.OrderBy(Roles.Ref.Name, desc)
+// OrderByName orders by roles.name ascending.
+func (b *RoleQuery) OrderByName() *RoleQuery {
+	b.q.OrderBy(Roles.Ref.Name, false)
+	return b
+}
+
+// OrderByNameDesc orders by roles.name descending.
+func (b *RoleQuery) OrderByNameDesc() *RoleQuery {
+	b.q.OrderBy(Roles.Ref.Name, true)
 	return b
 }
 
@@ -280,9 +292,15 @@ func (b *RoleQuery) WhereActiveNotIn(values ...bool) *RoleQuery {
 	return b
 }
 
-// OrderByActive orders by roles.active.
-func (b *RoleQuery) OrderByActive(desc bool) *RoleQuery {
-	b.q.OrderBy(Roles.Ref.Active, desc)
+// OrderByActive orders by roles.active ascending.
+func (b *RoleQuery) OrderByActive() *RoleQuery {
+	b.q.OrderBy(Roles.Ref.Active, false)
+	return b
+}
+
+// OrderByActiveDesc orders by roles.active descending.
+func (b *RoleQuery) OrderByActiveDesc() *RoleQuery {
+	b.q.OrderBy(Roles.Ref.Active, true)
 	return b
 }
 
